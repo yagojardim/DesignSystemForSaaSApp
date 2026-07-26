@@ -26,6 +26,7 @@ import ClientAccessPage from './pages/ClientAccessPage'
 import ClientLoginPage from './pages/ClientLoginPage'
 import DashboardHomePage from './pages/DashboardHomePage'
 import { setActiveUser, MOCK_USERS } from './data/session'
+import InviteMemberModal from './components/InviteMemberModal'
 
 const ALL_VIEWS: View[] = [
   'home','foundations','projects-list','gantt','calendar','dashboard','project',
@@ -127,14 +128,18 @@ export default function App() {
 function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void }) {
   const [role, setRole]           = useState<Role>('Admin')
   const [createOpen, setCreate]   = useState(false)
+  const [inviteOpen, setInvite]   = useState(false)
 
   return (
     <>
       {createOpen && (
         <CreateIssueModal onClose={()=>setCreate(false)} onCreate={()=>setCreate(false)} />
       )}
+      {inviteOpen && (
+        <InviteMemberModal onClose={()=>setInvite(false)} />
+      )}
       <Shell currentView={view} onViewChange={setView} role={role} onRoleChange={setRole} onCreateIssue={()=>setCreate(true)}>
-        {view==='home'          && <div className="h-full overflow-y-auto dark-shell"><DashboardHomePage onNav={v => { if (ALL_VIEWS.includes(v as View)) setView(v as View) }} /></div>}
+        {view==='home'          && <div className="h-full overflow-y-auto dark-shell"><DashboardHomePage onNav={v => { if (ALL_VIEWS.includes(v as View)) setView(v as View) }} onInvite={() => setInvite(true)} /></div>}
         {view==='projects-list' && <div className="h-full overflow-y-auto dark-shell"><ProjectsListPage/></div>}
         {view==='gantt'         && <div className="h-full overflow-hidden"><GanttPage/></div>}
         {view==='calendar'      && <div className="h-full overflow-hidden"><CalendarPage/></div>}

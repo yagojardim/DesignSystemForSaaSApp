@@ -3,11 +3,10 @@ import { useState, useRef, useEffect } from 'react'
 import { Avatar } from './ds/Avatar'
 import { Tooltip } from './ds/Tooltip'
 import { T } from './ds/tokens'
+import { getActiveUser } from '../data/session'
+import { can, type Capability } from '../data/permissions'
 
-// ─── Role type ────────────────────────────────────────────────────────────────
-// [ROLE] Admin   — full access: all nav + Mais section + admin gadgets on Início
-// [ROLE] Member  — project work access: all except Mais, Configuração, team admin
-// [ROLE] Viewer  — read-only: limited nav, no team/config/automations
+// ─── Role type (legacy coarse gate, kept for Shell compat) ───────────────────
 export type Role = 'Admin' | 'Member' | 'Viewer'
 
 interface SidebarProps {
@@ -18,89 +17,100 @@ interface SidebarProps {
   role:       Role
 }
 
-// ─── Nav definition with role gates ──────────────────────────────────────────
+// ─── Nav definition ───────────────────────────────────────────────────────────
 interface NavItem {
-  id:     string
-  label:  string
-  icon:   () => React.ReactElement
-  badge?: string
-  roles:  Role[]       // which roles can see this item
+  id:       string
+  label:    string
+  icon:     () => React.ReactElement
+  badge?:   string
+  // cap: if set, item shown only if user has this capability
+  cap?:     Capability
+  // minRole: coarse gate (Admin > Member > Viewer)
+  minRole?: 'Admin' | 'Member'
 }
 
 interface NavGroup {
-  label: string
-  roles: Role[]        // which roles see this group header
-  items: NavItem[]
+  label:    string
+  minRole?: 'Admin' | 'Member'
+  items:    NavItem[]
 }
 
 const ALL_GROUPS: NavGroup[] = [
   {
     label: 'Comece aqui',
-    roles: ['Admin', 'Member', 'Viewer'],
     items: [
-      { id: 'home', label: 'Início', icon: HomeIcon, roles: ['Admin', 'Member', 'Viewer'] },
+      { id: 'home', label: 'Início', icon: HomeIcon },
     ],
   },
   {
     label: 'Meu dia a dia',
-    roles: ['Admin', 'Member', 'Viewer'],
     items: [
-      { id: 'calendar', label: 'Calendário', icon: CalendarIcon, roles: ['Admin', 'Member', 'Viewer'] },
+      { id: 'calendar', label: 'Calendário', icon: CalendarIcon },
     ],
   },
   {
     label: 'Gestão',
-    roles: ['Admin', 'Member', 'Viewer'],
+    minRole: 'Member',
     items: [
-      { id: 'projects-list', label: 'Projetos & Tarefas', icon: ProjectIcon, roles: ['Admin', 'Member'] },
-      { id: 'project',       label: 'Kanban Board',        icon: BoardIcon,   roles: ['Admin', 'Member'] },
-      { id: 'list',          label: 'Lista',               icon: ListIcon,    roles: ['Admin', 'Member'] },
-      { id: 'gantt',         label: 'Gráfico Gantt',       icon: GanttIcon,   roles: ['Admin', 'Member'] },
-      { id: 'timeline',      label: 'Timeline',            icon: TimelineIcon,roles: ['Admin', 'Member'] },
-      { id: 'dashboard',     label: 'Dashboard',           icon: ChartIcon,   roles: ['Admin', 'Member'] },
-      // [ROLE] Viewer — read-only
-      { id: 'projects-list', label: 'Meus projetos',       icon: ProjectIcon, roles: ['Viewer'] },
-      { id: 'client',        label: 'Portal do cliente',   icon: ClientIcon,  roles: ['Viewer'] },
+      { id: 'projects-list', label: 'Projetos & Tarefas', icon: ProjectIcon },
+      { id: 'project',       label: 'Kanban Board',       icon: BoardIcon   },
+      { id: 'list',          label: 'Lista',              icon: ListIcon    },
+      { id: 'gantt',         label: 'Gráfico Gantt',      icon: GanttIcon   },
+      { id: 'timeline',      label: 'Timeline',           icon: TimelineIcon},
+      // Dashview — gated by access:dashview capability
+      { id: 'dashboard', label: 'Dashview', icon: ChartIcon, cap: 'access:dashview' },
     ],
   },
   {
     label: 'Planejamento',
-    roles: ['Admin', 'Member'],
+    minRole: 'Member',
     items: [
-      { id: 'epics',     label: 'Épicos',          icon: EpicNavIcon,  roles: ['Admin', 'Member'] },
-      { id: 'releases',  label: 'Releases',         icon: ReleaseIcon,  roles: ['Admin', 'Member'] },
-      { id: 'filters',   label: 'Filtros & Busca',  icon: FilterIcon,   roles: ['Admin', 'Member'] },
-      { id: 'navigator', label: 'Issue Navigator',  icon: NavIcon,      roles: ['Admin', 'Member'] },
+      // Épicos — gated by create:epic capability
+      { id: 'epics',     label: 'Épicos',         icon: EpicNavIcon, cap: 'create:epic'    },
+      { id: 'releases',  label: 'Releases',        icon: ReleaseIcon                       },
+      { id: 'filters',   label: 'Filtros & Busca', icon: FilterIcon                        },
+      { id: 'navigator', label: 'Issue Navigator', icon: NavIcon                           },
     ],
   },
   {
     label: 'Configuração',
-    roles: ['Admin'],
+    minRole: 'Admin',
     items: [
-      { id: 'config',        label: 'Configurações',        icon: ConfigIcon,  roles: ['Admin'] },
-      { id: 'automations',   label: 'Automações',           icon: AutomIcon,   roles: ['Admin'] },
-      { id: 'client-access', label: 'Criar acesso cliente', icon: AccessIcon,  roles: ['Admin'] },
-      { id: 'client',        label: 'Portal do Cliente',    icon: ClientIcon,  roles: ['Admin'] },
+      { id: 'config',        label: 'Configurações',        icon: ConfigIcon, cap: 'users:manage' },
+      { id: 'automations',   label: 'Automações',           icon: AutomIcon,  cap: 'users:manage' },
+      { id: 'client-access', label: 'Criar acesso cliente', icon: AccessIcon, cap: 'users:manage' },
+      { id: 'client',        label: 'Portal do Cliente',    icon: ClientIcon                      },
     ],
   },
   {
     label: 'Mais',
-    roles: ['Admin'],
+    minRole: 'Admin',
     items: [
-      { id: 'team',         label: 'Time & Permissões', icon: TeamIcon,    roles: ['Admin'] },
-      { id: 'reports',      label: 'Relatórios',        icon: ReportsIcon, roles: ['Admin'] },
-      { id: 'login',        label: 'Login Gestão',      icon: LoginIcon,   roles: ['Admin'] },
-      { id: 'client-login', label: 'Login Portal',      icon: PortalIcon,  roles: ['Admin'] },
+      { id: 'team',         label: 'Time & Permissões', icon: TeamIcon,    cap: 'users:manage' },
+      { id: 'reports',      label: 'Relatórios',        icon: ReportsIcon                     },
+      { id: 'login',        label: 'Login Gestão',      icon: LoginIcon,   cap: 'users:manage' },
+      { id: 'client-login', label: 'Login Portal',      icon: PortalIcon,  cap: 'users:manage' },
     ],
   },
 ]
 
-function getGroups(role: Role): NavGroup[] {
+const ROLE_RANK: Record<Role, number> = { Viewer: 0, Member: 1, Admin: 2 }
+
+function ClockIcon()   { return <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.2"/><path d="M6.5 4v2.5l1.5 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg> }
+
+function getGroups(role: Role, permissions: string[]): NavGroup[] {
+  const perms = permissions ?? []
   return ALL_GROUPS
-    .filter(g => g.roles.includes(role))
-    .map(g => ({ ...g, items: g.items.filter(i => i.roles.includes(role)) }))
+    .filter(g => !g.minRole || ROLE_RANK[role] >= ROLE_RANK[g.minRole])
+    .map(g => ({
+      ...g,
+      items: g.items.filter(item => {
+        if (item.minRole && ROLE_RANK[role] < ROLE_RANK[item.minRole]) return false
+        if (item.cap && !can(perms, item.cap)) return false
+        return true
+      }),
+    }))
     .filter(g => g.items.length > 0)
-    // deduplicate items with same id within each group
     .map(g => ({
       ...g,
       items: g.items.filter((item, idx, arr) => arr.findIndex(x => x.id === item.id) === idx),
@@ -275,24 +285,27 @@ const ROLE_STYLE: Record<Role, { color: string; bg: string }> = {
 
 function UserBlock({ collapsed, role }: { collapsed: boolean; role: Role }) {
   const rs = ROLE_STYLE[role]
+  const activeUser = getActiveUser()
+  const name  = activeUser?.name  ?? 'Usuário'
+  const email = activeUser?.email ?? ''
+  const roleLabel = activeUser?.role_context ?? role
   const btn = (
     <button
       className={`flex items-center gap-2.5 rounded-xl transition-colors ${collapsed ? 'w-10 h-10 justify-center' : 'w-full px-3 py-2.5'}`}
       onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${T.text3}14` }}
       onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
     >
-      <Avatar name="Ana Lima" size="sm" presence="online" />
+      <Avatar name={name} size="sm" presence="online" />
       {!collapsed && (
         <>
           <div className="flex-1 min-w-0 text-left">
             <div className="flex items-center gap-1.5">
-              <p className="text-[13px] font-medium truncate leading-tight" style={{ color: T.text1 }}>Ana Lima</p>
-              {/* [ROLE] Role badge — visible to self */}
+              <p className="text-[13px] font-medium truncate leading-tight" style={{ color: T.text1 }}>{name}</p>
               <span className="text-[9px] font-bold px-1.5 py-px rounded-full flex-shrink-0" style={{ color: rs.color, background: rs.bg }}>
-                {role}
+                {roleLabel}
               </span>
             </div>
-            <p className="text-[10px] truncate mt-0.5" style={{ color: T.text3 }}>ana@altech.com</p>
+            <p className="text-[10px] truncate mt-0.5" style={{ color: T.text3 }}>{email}</p>
           </div>
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ color: T.text3, flexShrink: 0 }}>
             <circle cx="6" cy="3" r="0.8" fill="currentColor" />
@@ -304,14 +317,17 @@ function UserBlock({ collapsed, role }: { collapsed: boolean; role: Role }) {
     </button>
   )
   return collapsed ? (
-    <Tooltip label="Ana Lima — Tech Lead" side="right">{btn}</Tooltip>
+    <Tooltip label={`${name} — ${roleLabel}`} side="right">{btn}</Tooltip>
   ) : btn
 }
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 export function Sidebar({ collapsed, onToggle, activeNav, onNav, role }: SidebarProps) {
   const [projectsExpanded, setProjectsExpanded] = useState(true)
-  const groups = getGroups(role)
+  const activeUser = getActiveUser()
+  const permissions = activeUser?.permissions ?? []
+  const groups = getGroups(role, permissions)
+  const canLogHours = can(permissions, 'log:hours')
 
   const sidebarStyle: React.CSSProperties = {
     width: collapsed ? 56 : 240,
@@ -421,6 +437,38 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav, role }: Sidebar
           ))
         )}
       </nav>
+
+      {/* Lançar horas — only for roles with log:hours */}
+      {canLogHours && (
+        <div className="flex-shrink-0 px-2 py-1.5" style={{ borderTop: `1px solid ${T.border}` }}>
+          {collapsed ? (
+            <Tooltip label="Lançar horas" side="right">
+              <button
+                onClick={() => {}}
+                className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors"
+                style={{ color: T.text2 }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${T.text3}14` }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+              >
+                <ClockIcon />
+              </button>
+            </Tooltip>
+          ) : (
+            <button
+              onClick={() => {}}
+              className="flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] transition-colors"
+              style={{ color: T.text2 }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${T.text3}14` }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+            >
+              <span className="w-5 h-5 flex items-center justify-center rounded-md">
+                <ClockIcon />
+              </span>
+              <span>Lançar horas</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* User block (pinned bottom) */}
       <div className="flex-shrink-0 px-1.5 py-2" style={{ borderTop: `1px solid ${T.border}` }}>

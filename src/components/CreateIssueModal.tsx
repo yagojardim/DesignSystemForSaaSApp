@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { T } from './ds/tokens'
+import { getActiveUser } from '../data/session'
+import { can } from '../data/permissions'
 
 // ─── Create Issue — campos condicionais quando tipo=Bug
 // Bug: passos, esperado vs encontrado, ambiente, evidência
@@ -136,7 +138,18 @@ function StepsField({ steps, onChange }: { steps: string[]; onChange:(s:string[]
 }
 
 export function CreateIssueModal({ onClose, onCreate }: CreateIssueModalProps) {
-  const [type,        setType]       = useState<IssueType>('story')
+  // Permission-gated issue types
+  const activeUser = getActiveUser()
+  const perms = activeUser?.permissions ?? []
+  const allowedTypes: IssueType[] = (['epic','story','task','bug','subtask'] as IssueType[]).filter(t => {
+    if (t === 'epic')    return can(perms, 'create:epic')
+    if (t === 'story')   return can(perms, 'create:story')
+    if (t === 'task')    return can(perms, 'create:task')
+    if (t === 'bug')     return can(perms, 'create:bug')
+    if (t === 'subtask') return can(perms, 'create:subtask')
+    return false
+  })
+  const [type,        setType]       = useState<IssueType>(allowedTypes[0] ?? 'task')
   const [summary,     setSummary]    = useState('')
   const [description, setDesc]       = useState('')
   const [priority,    setPriority]   = useState<Priority>('medium')
@@ -218,10 +231,10 @@ export function CreateIssueModal({ onClose, onCreate }: CreateIssueModalProps) {
         {/* Body */}
         <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
 
-          {/* Type selector */}
+          {/* Type selector — only shows types the current user can create */}
           <Field label="Tipo">
-            <div className="grid grid-cols-5 gap-1.5">
-              {(Object.entries(TYPE_CFG) as [IssueType, typeof TYPE_CFG[IssueType]][]).map(([k,v]) => (
+            <div className="flex flex-wrap gap-1.5">
+              {(Object.entries(TYPE_CFG) as [IssueType, typeof TYPE_CFG[IssueType]][]).filter(([k]) => allowedTypes.includes(k)).map(([k,v]) => (
                 <button
                   key={k}
                   onClick={()=>setType(k)}

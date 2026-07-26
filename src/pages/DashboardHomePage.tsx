@@ -54,7 +54,7 @@ function ColSpan({ children }: { children: ReactNode }) {
 }
 
 // ─── 1. ADMIN MASTER ─────────────────────────────────────────────────────────
-function AdminPanel({ onNav }: { onNav: (v: string) => void }) {
+function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?: () => void }) {
   const [filters, setFilters] = useFilters()
 
   const modules = [
@@ -119,7 +119,7 @@ function AdminPanel({ onNav }: { onNav: (v: string) => void }) {
               </div>
             ))}
           </div>
-          <button onClick={() => onNav('config')} style={{ marginTop: 12, width: '100%', fontSize: 11, color: T.accent, background: `${T.accent}12`, border: `1px solid ${T.accent}33`, borderRadius: 6, padding: '6px', cursor: 'pointer' }}>
+          <button onClick={() => onInvite ? onInvite() : onNav('config')} style={{ marginTop: 12, width: '100%', fontSize: 11, color: T.accent, background: `${T.accent}12`, border: `1px solid ${T.accent}33`, borderRadius: 6, padding: '6px', cursor: 'pointer' }}>
             + Convidar usuário
           </button>
         </SCard>
@@ -743,9 +743,9 @@ function QaPanel({ onNav }: { onNav: (v: string) => void }) {
 }
 
 // ─── Panel dispatcher ────────────────────────────────────────────────────────
-function DashboardContent({ type, onNav }: { type: DashboardType; onNav: (v: string) => void }) {
+function DashboardContent({ type, onNav, onInvite }: { type: DashboardType; onNav: (v: string) => void; onInvite?: () => void }) {
   switch (type) {
-    case 'admin':           return <AdminPanel          onNav={onNav} />
+    case 'admin':           return <AdminPanel          onNav={onNav} onInvite={onInvite} />
     case 'pmo':             return <PmoPanel            onNav={onNav} />
     case 'project-manager': return <ProjectManagerPanel onNav={onNav} />
     case 'product-manager': return <ProductManagerPanel onNav={onNav} />
@@ -801,9 +801,9 @@ function InspectionSwitcher({ onUserChange }: { onUserChange: () => void }) {
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
-interface Props { onNav?: (view: string) => void }
+interface Props { onNav?: (view: string) => void; onInvite?: () => void }
 
-export default function DashboardHomePage({ onNav }: Props) {
+export default function DashboardHomePage({ onNav, onInvite }: Props) {
   const [scope, setScope]           = useState<UserScope | null>(null)
   const [activeDashId, setActiveDash] = useState<DashboardType | null>(null)
   const [rev, setRev]               = useState(0)
@@ -872,7 +872,7 @@ export default function DashboardHomePage({ onNav }: Props) {
       </div>
 
       {/* ── Dashboard content ───────────────────────────────────── */}
-      <DashboardContent type={activeDashId} onNav={navigate} />
+      <DashboardContent type={activeDashId} onNav={navigate} onInvite={onInvite} />
     </div>
   )
 }

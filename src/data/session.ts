@@ -1,5 +1,6 @@
 // ─── Inspection Mode mock session data ───────────────────────────────────────
 // All data is tenant-scoped. Never expose cross-tenant data.
+import { derivePermissions } from './permissions'
 
 export interface Tenant {
   tenant_id: string
@@ -119,8 +120,7 @@ export const MOCK_USERS: MockUser[] = [
     project_id: 'proj_001',
     squad_id: 'squad_platform',
     modules_enabled: ['board','reports','portfolio','roadmap'],
-    permissions: ['project:read','project:write','report:read','config:read','team:read'],
-    // Multiple dashboards: PMO default + Admin view
+    permissions: derivePermissions('PMO'),
     assigned_dashboards: [ud('u_pmo', 'pmo', true), ud('u_pmo', 'admin', false)],
   },
   {
@@ -134,7 +134,7 @@ export const MOCK_USERS: MockUser[] = [
     project_id: 'proj_001',
     squad_id: 'squad_growth',
     modules_enabled: ['board','reports','roadmap','releases'],
-    permissions: ['project:read','project:write','report:read','release:write'],
+    permissions: derivePermissions('ProjectManager'),
     assigned_dashboards: [ud('u_pm', 'project-manager', true)],
   },
   {
@@ -148,8 +148,7 @@ export const MOCK_USERS: MockUser[] = [
     project_id: 'proj_001',
     squad_id: 'squad_growth',
     modules_enabled: ['board','reports','roadmap','analytics'],
-    permissions: ['project:read','report:read','analytics:read'],
-    // Multiple: Product Manager default + PMO view
+    permissions: derivePermissions('ProductManager'),
     assigned_dashboards: [ud('u_prodmgr', 'product-manager', true), ud('u_prodmgr', 'pmo', false)],
   },
   {
@@ -163,8 +162,7 @@ export const MOCK_USERS: MockUser[] = [
     project_id: 'proj_001',
     squad_id: 'squad_growth',
     modules_enabled: ['board','reports','roadmap'],
-    permissions: ['project:read','project:write','backlog:write'],
-    // Multiple: PO default + Project Manager view
+    permissions: derivePermissions('ProductOwner'),
     assigned_dashboards: [ud('u_po', 'product-owner', true), ud('u_po', 'project-manager', false)],
   },
   {
@@ -178,7 +176,7 @@ export const MOCK_USERS: MockUser[] = [
     project_id: 'proj_001',
     squad_id: 'squad_growth',
     modules_enabled: ['board','reports'],
-    permissions: ['project:read','project:write','sprint:write'],
+    permissions: derivePermissions('ScrumMaster'),
     assigned_dashboards: [ud('u_sm', 'scrum-master', true)],
   },
   {
@@ -192,8 +190,8 @@ export const MOCK_USERS: MockUser[] = [
     project_id: 'proj_002',
     squad_id: 'squad_platform',
     modules_enabled: ['board','reports','integrations','deployments'],
-    permissions: ['project:read','project:write','deploy:write','repo:read'],
-    // Multiple: TechLead default + Dev view
+    // TechLead with opt-ins for epic/dashview (granted at invite time)
+    permissions: derivePermissions('TechLead', ['create:epic', 'create:feature', 'access:dashview']),
     assigned_dashboards: [ud('u_tl', 'tech-lead', true), ud('u_tl', 'dev', false)],
   },
   {
@@ -207,7 +205,7 @@ export const MOCK_USERS: MockUser[] = [
     project_id: 'proj_002',
     squad_id: 'squad_platform',
     modules_enabled: ['board','reports'],
-    permissions: ['project:read','issue:write'],
+    permissions: derivePermissions('Dev'),
     assigned_dashboards: [ud('u_dev', 'dev', true)],
   },
   {
@@ -221,7 +219,7 @@ export const MOCK_USERS: MockUser[] = [
     project_id: 'proj_001',
     squad_id: 'squad_design',
     modules_enabled: ['board','reports'],
-    permissions: ['project:read','project:write'],
+    permissions: derivePermissions('UX'),
     assigned_dashboards: [ud('u_ux', 'ux', true)],
   },
   {
@@ -235,8 +233,7 @@ export const MOCK_USERS: MockUser[] = [
     project_id: 'proj_002',
     squad_id: 'squad_platform',
     modules_enabled: ['board','reports'],
-    permissions: ['project:read','issue:write','bug:write'],
-    // Multiple: QA default + TechLead view
+    permissions: derivePermissions('QA'),
     assigned_dashboards: [ud('u_qa', 'qa', true), ud('u_qa', 'tech-lead', false)],
   },
 ]
@@ -299,4 +296,19 @@ export function getActiveScope(): UserScope {
 
 export function getActiveUser(): MockUser {
   return MOCK_USERS.find(u => u.user_id === ACTIVE_USER_ID)!
+}
+
+// ─── Invite flow (mock): adds a new user to the in-memory list ────────────────
+export function addMockUser(user: MockUser): void {
+  MOCK_USERS.push(user)
+}
+
+export function deactivateMockUser(user_id: string): void {
+  const u = MOCK_USERS.find(u => u.user_id === user_id)
+  if (u) (u as MockUser & { status?: string }).status = 'inactive'
+}
+
+export function blockMockUser(user_id: string): void {
+  const u = MOCK_USERS.find(u => u.user_id === user_id)
+  if (u) (u as MockUser & { status?: string }).status = 'blocked'
 }
