@@ -42,6 +42,7 @@ export type Capability =
   | 'project:create'
   | 'users:manage'
   | 'module:request'
+  | 'access:client-portal'
 
 // ─── Matrix: for each capability, which roles have it by default vs opt-in ───
 interface CapabilityRule {
@@ -136,6 +137,11 @@ export const PERMISSION_MATRIX: Record<Capability, CapabilityRule> = {
     optIn:   ['PMO'],
     hidden:  ['ProjectManager','ProductManager','ProductOwner','ScrumMaster','TechLead','Dev','QA','UX'],
   },
+  'access:client-portal': {
+    default: ['Admin','PMO','ProjectManager','ProductManager','ProductOwner'],
+    optIn:   ['ScrumMaster','TechLead'],
+    hidden:  ['Dev','QA','UX'],
+  },
 }
 
 // ─── Derive permissions[] string array from role + opt-ins ───────────────────
@@ -212,12 +218,17 @@ export const STEP4_CAPABILITIES: { cap: Capability; label: string; desc: string 
   },
   {
     cap:   'access:dashview',
-    label: 'Acesso ao Dashview',
+    label: 'Acesso ao Dashboard Executivo',
     desc:  'Permite visualizar dashboards de alto nível do projeto',
   },
   {
     cap:   'approve:hours',
     label: 'Aprovador de Horas',
     desc:  'Permite aprovar lançamentos de horas da equipe',
+  },
+  {
+    cap:   'access:client-portal',
+    label: 'Acesso ao Portal do Cliente',
+    desc:  'Permite visualizar e gerir a visão do portal do cliente',
   },
 ]

@@ -28,7 +28,7 @@ export default function ClientAccessPage({ onGoToPortal }: Props) {
 
   useEffect(() => {
     if (done) {
-      setGeneratedUrl(`https://dashview.altech.io/client/${generateHash()}`)
+      setGeneratedUrl(`https://portal.altech.io/client/${generateHash()}`)
     }
   }, [done])
 

@@ -57,8 +57,7 @@ const ALL_GROUPS: NavGroup[] = [
       { id: 'list',          label: 'Lista',              icon: ListIcon    },
       { id: 'gantt',         label: 'Gráfico Gantt',      icon: GanttIcon   },
       { id: 'timeline',      label: 'Timeline',           icon: TimelineIcon},
-      // Dashview — gated by access:dashview capability
-      { id: 'dashboard', label: 'Dashview', icon: ChartIcon, cap: 'access:dashview' },
+      { id: 'dashboard', label: 'Dashboard Executivo', icon: ChartIcon, cap: 'access:dashview' },
     ],
   },
   {
@@ -78,8 +77,8 @@ const ALL_GROUPS: NavGroup[] = [
     items: [
       { id: 'config',        label: 'Configurações',        icon: ConfigIcon, cap: 'users:manage' },
       { id: 'automations',   label: 'Automações',           icon: AutomIcon,  cap: 'users:manage' },
-      { id: 'client-access', label: 'Criar acesso cliente', icon: AccessIcon, cap: 'users:manage' },
-      { id: 'client',        label: 'Portal do Cliente',    icon: ClientIcon                      },
+      { id: 'client-access', label: 'Criar acesso cliente', icon: AccessIcon, cap: 'access:client-portal' },
+      { id: 'client',        label: 'Portal do Cliente',    icon: ClientIcon, cap: 'access:client-portal' },
     ],
   },
   {
