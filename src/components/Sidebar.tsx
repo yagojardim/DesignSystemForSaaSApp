@@ -38,21 +38,14 @@ const ALL_GROUPS: NavGroup[] = [
     label: 'Comece aqui',
     roles: ['Admin', 'Member', 'Viewer'],
     items: [
-      // [ROLE] All — personal home is always available
-      { id: 'home',      label: 'Início',           icon: HomeIcon,    roles: ['Admin', 'Member', 'Viewer'] },
-      // [ROLE] Admin + Member — viewers don't have personal tasks in-system
-      { id: 'my-tasks',  label: 'Minhas tarefas',   icon: TaskIcon,    badge: '4', roles: ['Admin', 'Member'] },
-      { id: 'inbox',     label: 'Caixa de entrada', icon: InboxIcon,   badge: '2', roles: ['Admin', 'Member'] },
+      { id: 'home', label: 'Início', icon: HomeIcon, roles: ['Admin', 'Member', 'Viewer'] },
     ],
   },
   {
     label: 'Meu dia a dia',
     roles: ['Admin', 'Member', 'Viewer'],
     items: [
-      // [ROLE] Admin + Member — Viewers only see calendar (read-only)
-      { id: 'today',    label: 'Hoje',         icon: TodayIcon,    roles: ['Admin', 'Member'] },
-      // [ROLE] All
-      { id: 'calendar', label: 'Calendário',   icon: CalendarIcon, roles: ['Admin', 'Member', 'Viewer'] },
+      { id: 'calendar', label: 'Calendário', icon: CalendarIcon, roles: ['Admin', 'Member', 'Viewer'] },
     ],
   },
   {
@@ -64,7 +57,6 @@ const ALL_GROUPS: NavGroup[] = [
       { id: 'list',          label: 'Lista',               icon: ListIcon,    roles: ['Admin', 'Member'] },
       { id: 'gantt',         label: 'Gráfico Gantt',       icon: GanttIcon,   roles: ['Admin', 'Member'] },
       { id: 'timeline',      label: 'Timeline',            icon: TimelineIcon,roles: ['Admin', 'Member'] },
-      { id: 'calendar',      label: 'Calendário',          icon: CalendarIcon,roles: ['Admin', 'Member', 'Viewer'] },
       { id: 'dashboard',     label: 'Dashboard',           icon: ChartIcon,   roles: ['Admin', 'Member'] },
       // [ROLE] Viewer — read-only
       { id: 'projects-list', label: 'Meus projetos',       icon: ProjectIcon, roles: ['Viewer'] },
@@ -383,9 +375,11 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav, role }: Sidebar
       <nav className={`flex-1 overflow-y-auto pb-2 ${collapsed ? 'px-1.5 space-y-1' : 'px-2 space-y-4'}`}>
         {collapsed ? (
           // Collapsed: flat list of all visible items
-          groups.flatMap(g => g.items).map(item => (
-            <NavBtn key={`${item.id}-${item.label}`} item={item} active={activeNav === item.id} onClick={() => onNav(item.id)} collapsed />
-          ))
+          groups.flatMap(g => g.items)
+            .filter((item, idx, arr) => arr.findIndex(x => x.id === item.id) === idx)
+            .map(item => (
+              <NavBtn key={item.id} item={item} active={activeNav === item.id} onClick={() => onNav(item.id)} collapsed />
+            ))
         ) : (
           // Expanded: grouped
           groups.map(group => (
@@ -438,9 +432,7 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav, role }: Sidebar
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 function HomeIcon()    { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1.5 6.5L7 2L12.5 6.5V12.5H9V9H5V12.5H1.5V6.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg> }
-function TaskIcon()    { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M5 7l1.5 1.5L9 5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg> }
-function InboxIcon()   { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 9h3l1 2h2l1-2h3V4.5A1.5 1.5 0 0 0 10.5 3h-7A1.5 1.5 0 0 0 2 4.5V9z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg> }
-function TodayIcon()   { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M5 2v2M9 2v2M2 6h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg> }
+
 function CalendarIcon(){ return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M5 2v2M9 2v2M2 6h10M5 9h1M7 9h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg> }
 function ProjectIcon() { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.3"/><rect x="8" y="2" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.3"/><rect x="2" y="8" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.3"/><rect x="8" y="8" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.3"/></svg> }
 function GanttIcon()   { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="4" width="5" height="2" rx="1" fill="currentColor" opacity=".7"/><rect x="5" y="7" width="7" height="2" rx="1" fill="currentColor" opacity=".7"/><rect x="3" y="10" width="4" height="2" rx="1" fill="currentColor" opacity=".7"/></svg> }

@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Shell, type View } from './components/Shell'
 import FoundationsPage from './pages/FoundationsPage'
-import HomePage from './pages/HomePage'
 import DashboardPage from './pages/DashboardPage'
 import ProjectPage from './pages/ProjectPage'
 import IssueDetailPage from './pages/IssueDetailPage'
@@ -23,16 +22,17 @@ import { CreateIssueModal } from './components/CreateIssueModal'
 import { CatalogProvider } from './data/CatalogContext'
 import type { Role } from './components/Sidebar'
 import LoginPage from './pages/LoginPage'
-import RoleDashboard from './pages/RoleDashboard'
 import ClientAccessPage from './pages/ClientAccessPage'
 import ClientLoginPage from './pages/ClientLoginPage'
+import DashboardHomePage from './pages/DashboardHomePage'
+import { setActiveUser, MOCK_USERS } from './data/session'
 
 const ALL_VIEWS: View[] = [
   'home','foundations','projects-list','gantt','calendar','dashboard','project',
   'list','timeline','epics','releases','filters','navigator',
   'reports','automations','config',
   'issue','client','task-drawer',
-  'login','role-dashboard','client-access','client-login',
+  'login','client-access','client-login',
 ]
 
 export const VIEW_LABELS: Record<View, string> = {
@@ -48,21 +48,20 @@ export const VIEW_LABELS: Record<View, string> = {
 
 export default function App() {
   const [view, setView] = useState<View>('home')
-  const [dashRole, setDashRole] = useState<string>('PMO')
 
   if (view === 'login') {
     return (
       <LoginPage
-        onSuccess={(role) => { setDashRole(role); setView('role-dashboard') }}
-      />
-    )
-  }
-
-  if (view === 'role-dashboard') {
-    return (
-      <RoleDashboard
-        role={dashRole}
-        onBack={() => setView('login')}
+        onSuccess={(roleStr) => {
+          // Map LoginPage role labels → session user_ids
+          const roleMap: Record<string, string> = {
+            'PMO': 'u_pmo', 'PM': 'u_pm', 'P.O': 'u_po', 'SM': 'u_sm',
+            'TechLead': 'u_tl', 'Dev': 'u_dev', 'UX/UI': 'u_ux', 'QA': 'u_qa',
+          }
+          const matched = MOCK_USERS.find(u => u.user_id === (roleMap[roleStr] ?? 'u_pm'))
+          if (matched) setActiveUser(matched.user_id)
+          setView('home')
+        }}
       />
     )
   }
@@ -135,7 +134,7 @@ function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void })
         <CreateIssueModal onClose={()=>setCreate(false)} onCreate={()=>setCreate(false)} />
       )}
       <Shell currentView={view} onViewChange={setView} role={role} onRoleChange={setRole} onCreateIssue={()=>setCreate(true)}>
-        {view==='home'          && <div className="h-full overflow-hidden"><HomePage role={role}/></div>}
+        {view==='home'          && <div className="h-full overflow-y-auto dark-shell"><DashboardHomePage onNav={v => { if (ALL_VIEWS.includes(v as View)) setView(v as View) }} /></div>}
         {view==='projects-list' && <div className="h-full overflow-y-auto dark-shell"><ProjectsListPage/></div>}
         {view==='gantt'         && <div className="h-full overflow-hidden"><GanttPage/></div>}
         {view==='calendar'      && <div className="h-full overflow-hidden"><CalendarPage/></div>}

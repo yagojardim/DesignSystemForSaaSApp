@@ -7,52 +7,53 @@
 
 :root {
   /* ── Backgrounds ──────────────────────────────────────────── */
-  --bg-page:       #0e1016;
-  --bg-surface:    #171a22;
-  --bg-surface-2:  #1e222c;
-  --bg-overlay:    rgba(8,10,14,0.72);
+  --bg-page:       #09090B;
+  --bg-surface:    #16161D;
+  --bg-surface-2:  #1C1C26;
+  --bg-overlay:    rgba(9,9,11,0.80);
 
   /* ── Borders ──────────────────────────────────────────────── */
-  --border-subtle: #262b37;
-  --border-default:#2f3547;
+  --border-subtle: #262633;
+  --border-default:#2E2E40;
 
   /* ── Text ─────────────────────────────────────────────────── */
-  --text-primary:  #e7eaf2;
-  --text-secondary:#a2a8ba;
-  --text-muted:    #6a7390;
+  --text-primary:  #F1F1F5;
+  --text-secondary:#9898AD;
+  --text-muted:    #5C5C7A;
 
-  /* ── Accent / Primary ─────────────────────────────────────── */
-  --primary:       #7d92ff;
-  --primary-hover: #6a7eec;
-  --primary-active:#5a6eda;
-  --accent:        #7d92ff;
-  --focus-ring:    rgba(125,146,255,0.35);
+  /* ── Accent / Primary — Altech Blue ──────────────────────── */
+  --primary:       #3B82F6;
+  --primary-hover: #2563EB;
+  --primary-active:#1D4ED8;
+  --accent:        #3B82F6;
+  --indigo:        #6366F1;
+  --focus-ring:    rgba(59,130,246,0.35);
 
   /* ── Semantic: Success ────────────────────────────────────── */
-  --healthy:       #35c9ae;
-  --healthy-tint:  rgba(53,201,174,0.12);
-  --success:       #35c9ae;
-  --success-dim:   rgba(53,201,174,0.12);
+  --healthy:       #10B981;
+  --healthy-tint:  rgba(16,185,129,0.12);
+  --success:       #10B981;
+  --success-dim:   rgba(16,185,129,0.12);
 
   /* ── Semantic: Warning ────────────────────────────────────── */
-  --warning:       #e6b23c;
-  --warning-tint:  rgba(230,178,60,0.12);
-  --warn:          #e6b23c;
-  --warn-dim:      rgba(230,178,60,0.12);
+  --warning:       #F59E0B;
+  --warning-tint:  rgba(245,158,11,0.12);
+  --warn:          #F59E0B;
+  --warn-dim:      rgba(245,158,11,0.12);
 
   /* ── Semantic: Critical ───────────────────────────────────── */
-  --blocked:       #f0805c;
-  --blocked-tint:  rgba(240,128,92,0.12);
-  --crit:          #f0805c;
-  --crit-dim:      rgba(240,128,92,0.12);
+  --blocked:       #EF4444;
+  --blocked-tint:  rgba(239,68,68,0.12);
+  --crit:          #EF4444;
+  --crit-dim:      rgba(239,68,68,0.12);
 
   /* ── Semantic: In-progress ────────────────────────────────── */
-  --inprogress:    #7d92ff;
-  --inprogress-tint: rgba(125,146,255,0.12);
+  --inprogress:    #3B82F6;
+  --inprogress-tint: rgba(59,130,246,0.12);
 
   /* ── Semantic: Neutral / Backlog ──────────────────────────── */
-  --backlog:       #6a7390;
-  --backlog-tint:  rgba(106,115,144,0.12);
+  --backlog:       #5C5C7A;
+  --backlog-tint:  rgba(92,92,122,0.12);
 
   /* ── Elevation ────────────────────────────────────────────── */
   --shadow-1: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
