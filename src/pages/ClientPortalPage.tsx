@@ -1,4 +1,8 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import {
+  addClientSignal, getSignalsForItem, markReadByPo,
+} from '../data/clientSignals'
+import { MOCK_TENANT } from '../data/session'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -19,6 +23,50 @@ const C = {
 
 const SEV_COLOR = { low: C.success, medium: C.warn, high: C.crit, critical: '#e03a50' }
 const SEV_LABEL = { low: 'Baixo', medium: 'Médio', high: 'Alto', critical: 'Crítico' }
+
+// ─── Local toast (portal is standalone — no global ToastProvider) ────────────
+interface LocalToast { id: string; msg: string; type: 'success' | 'info' }
+
+function useLocalToast() {
+  const [toasts, setToasts] = useState<LocalToast[]>([])
+  const add = useCallback((msg: string, type: LocalToast['type'] = 'success') => {
+    const id = `t${Date.now()}`
+    setToasts(prev => [...prev, { id, msg, type }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3800)
+  }, [])
+  return { toasts, add }
+}
+
+function LocalToastStack({ toasts }: { toasts: LocalToast[] }) {
+  if (!toasts.length) return null
+  return (
+    <div className="fixed bottom-6 right-6 z-[200] flex flex-col gap-2 pointer-events-none">
+      {toasts.map(t => (
+        <div
+          key={t.id}
+          className="flex items-center gap-3 px-4 py-3 rounded-xl fade-rise pointer-events-auto"
+          style={{
+            background: C.surface,
+            border: `1px solid ${t.type === 'success' ? C.success + '50' : C.accent + '50'}`,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+            minWidth: 280,
+          }}
+        >
+          <span
+            className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: t.type === 'success' ? `${C.success}18` : `${C.accent}18` }}
+          >
+            {t.type === 'success'
+              ? <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ color: C.success }}><path d="M2 6.5L5 9.5L11 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              : <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ color: C.accent }}><path d="M6.5 4v4M6.5 9v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+            }
+          </span>
+          <p className="text-xs font-medium flex-1" style={{ color: C.txt }}>{t.msg}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 // ─── Shared mini-components ───────────────────────────────────────────────────
 function SevBadge({ level }: { level: keyof typeof SEV_COLOR }) {
@@ -68,6 +116,153 @@ function Pill({ color, label }: { color: string; label: string }) {
       <span className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
       {label}
     </span>
+  )
+}
+
+// ─── Client comment thread ────────────────────────────────────────────────────
+function ClientCommentInput({
+  itemId, itemTitle, project, onSent,
+}: {
+  itemId: string; itemTitle: string; project: string
+  onSent: (msg: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [val, setVal]   = useState('')
+
+  function send() {
+    const body = val.trim()
+    if (!body) return
+    addClientSignal({
+      type:           'comment',
+      item_id:        itemId,
+      item_title:     itemTitle,
+      project,
+      tenant_id:      MOCK_TENANT.tenant_id,
+      responsible_po: 'u_po',
+      body,
+      author:         'João Silva',
+      author_initials: 'JS',
+      created_at:     new Date().toISOString(),
+      read_by_po:     false,
+    })
+    onSent(body)
+    setVal('')
+    setOpen(false)
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="text-[10px] font-medium h-6 px-2.5 rounded-lg transition-all"
+        style={{ color: C.txt3, background: C.surface2, border: `1px solid ${C.border}` }}
+        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = C.accent; (e.currentTarget as HTMLButtonElement).style.borderColor = C.accent + '60' }}
+        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = C.txt3; (e.currentTarget as HTMLButtonElement).style.borderColor = C.border }}
+      >
+        + Comentar
+      </button>
+    )
+  }
+
+  return (
+    <div
+      className="mt-2 rounded-xl p-3 flex flex-col gap-2"
+      style={{ background: C.surface2, border: `1px solid ${C.border2}` }}
+    >
+      <textarea
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        placeholder="Escreva seu comentário ou feedback..."
+        rows={3}
+        autoFocus
+        className="w-full text-xs rounded-lg px-3 py-2 outline-none resize-none font-[inherit]"
+        style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.txt, caretColor: C.accent }}
+        onFocus={e => { e.currentTarget.style.borderColor = C.accent + '80' }}
+        onBlur={e => { e.currentTarget.style.borderColor = C.border }}
+        onKeyDown={e => { if (e.key === 'Escape') { setOpen(false); setVal('') } }}
+      />
+      <div className="flex items-center justify-between">
+        <p className="text-[9px]" style={{ color: C.txt3 }}>Esc para cancelar · seu comentário é enviado ao responsável pelo projeto</p>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setOpen(false); setVal('') }}
+            className="h-6 px-2.5 text-[10px] font-medium rounded-lg"
+            style={{ color: C.txt3 }}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={send}
+            disabled={!val.trim()}
+            className="h-6 px-3 text-[10px] font-semibold rounded-lg transition-all"
+            style={{
+              background: val.trim() ? C.accent : C.surface,
+              color: val.trim() ? '#fff' : C.txt3,
+              border: `1px solid ${val.trim() ? C.accent : C.border}`,
+            }}
+          >
+            Enviar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ClientSignalThread({ itemId, refresh }: { itemId: string; refresh: number }) {
+  const signals = getSignalsForItem(itemId, MOCK_TENANT.tenant_id)
+  const comments = signals.filter(s => s.type === 'comment')
+
+  // Mark unread signals as read when client views them (client reads PO replies)
+  useEffect(() => {
+    signals.forEach(s => { if (!s.read_by_po) markReadByPo(s.id) })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refresh])
+
+  if (!comments.length) return null
+
+  return (
+    <div className="mt-2 space-y-2">
+      {comments.map(c => (
+        <div key={c.id} className="space-y-1.5">
+          {/* Client message */}
+          <div
+            className="rounded-xl px-3 py-2.5"
+            style={{ background: `${C.accent}0C`, border: `1px solid ${C.accent}20` }}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <span
+                className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0"
+                style={{ background: C.accent, color: '#fff' }}
+              >{c.author_initials}</span>
+              <span className="text-[10px] font-semibold" style={{ color: C.accent }}>{c.author}</span>
+              <span className="text-[9px]" style={{ color: C.txt3 }}>{new Date(c.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</span>
+            </div>
+            <p className="text-xs leading-relaxed" style={{ color: C.txt2 }}>{c.body}</p>
+          </div>
+          {/* PO public reply */}
+          {c.po_reply && (
+            <div
+              className="ml-4 rounded-xl px-3 py-2.5"
+              style={{ background: `${C.success}08`, border: `1px solid ${C.success}25` }}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <span
+                  className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0"
+                  style={{ background: C.success, color: '#fff' }}
+                >BA</span>
+                <span className="text-[10px] font-semibold" style={{ color: C.success }}>Equipe Altech</span>
+                <span
+                  className="text-[9px] px-1.5 py-px rounded-full"
+                  style={{ color: C.success, background: `${C.success}18` }}
+                >resposta pública</span>
+              </div>
+              <p className="text-xs leading-relaxed" style={{ color: C.txt2 }}>{c.po_reply}</p>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -267,32 +462,38 @@ function ProgressCard({ project }: { project: typeof PROJECTS[0] }) {
 }
 
 // ─── CARD 2: Sprint deliveries (client-safe, replaces Burndown) ───────────────
-function SprintDeliveriesCard({ projectFilter }: { projectFilter: Set<string> }) {
+function SprintDeliveriesCard({ projectFilter, onComment }: { projectFilter: Set<string>; onComment: (msg: string) => void }) {
+  const [refresh, setRefresh] = useState(0)
   const projectNames = new Set(PROJECTS.filter(p => projectFilter.has(p.id)).map(p => p.name))
   const items = SPRINT_DELIVERIES.filter(d => projectNames.size === 0 || projectNames.has(d.project))
+
   return (
     <CardShell>
       <CardTitle>Entregas desta sprint</CardTitle>
-      <div className="px-4 py-3 space-y-2">
+      <div className="px-4 py-3 space-y-3">
         {items.map(d => {
           const s = DELIVERY_STATUS[d.status]
           return (
             <div
               key={d.id}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
+              className="px-3 py-2.5 rounded-xl"
               style={{ background: C.surface2, border: `1px solid ${C.border}` }}
             >
-              <span
-                className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                style={{ background: s.color }}
-              />
-              <span className="flex-1 text-xs leading-snug" style={{ color: C.txt }}>{d.title}</span>
-              <span
-                className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
-                style={{ color: s.color, background: `${s.color}18`, border: `1px solid ${s.color}35` }}
-              >
-                {s.label}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: s.color }} />
+                <span className="flex-1 text-xs leading-snug" style={{ color: C.txt }}>{d.title}</span>
+                <span
+                  className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
+                  style={{ color: s.color, background: `${s.color}18`, border: `1px solid ${s.color}35` }}
+                >
+                  {s.label}
+                </span>
+                <ClientCommentInput
+                  itemId={d.id} itemTitle={d.title} project={d.project}
+                  onSent={_msg => { setRefresh(r => r + 1); onComment('Feedback enviado à equipe responsável.') }}
+                />
+              </div>
+              <ClientSignalThread itemId={d.id} refresh={refresh} />
             </div>
           )
         })}
@@ -414,8 +615,15 @@ function RisksCard() {
 }
 
 // ─── CARD 6: Awaiting client validation ──────────────────────────────────────
-function ValidationCard() {
+function ValidationCard({ onComment }: { onComment: (msg: string) => void }) {
   const [approved, setApproved] = useState<Set<string>>(new Set())
+  const [refresh, setRefresh] = useState(0)
+
+  function handleSent(_msg: string) {
+    setRefresh(r => r + 1)
+    onComment(`Comentário enviado — a equipe responsável será notificada.`)
+  }
+
   return (
     <CardShell style={{ borderLeft: `3px solid ${C.success}` }}>
       <CardTitle>
@@ -456,7 +664,17 @@ function ValidationCard() {
                     Ver preview
                   </button>
                   <button
-                    onClick={() => setApproved(prev => new Set([...prev, v.id]))}
+                    onClick={() => {
+                      setApproved(prev => new Set([...prev, v.id]))
+                      addClientSignal({
+                        type: 'approval', item_id: v.id, item_title: v.title,
+                        project: v.project, tenant_id: MOCK_TENANT.tenant_id,
+                        responsible_po: 'u_po', author: 'João Silva',
+                        author_initials: 'JS', created_at: new Date().toISOString(),
+                        read_by_po: false,
+                      })
+                      onComment(`✓ Aprovação registrada: "${v.title}"`)
+                    }}
                     className="h-7 px-3 rounded-lg text-xs font-semibold transition-all"
                     style={{ background: C.success, color: '#fff' }}
                     onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85' }}
@@ -464,10 +682,16 @@ function ValidationCard() {
                   >
                     Aprovar
                   </button>
+                  <ClientCommentInput
+                    itemId={v.id} itemTitle={v.title} project={v.project}
+                    onSent={handleSent}
+                  />
                 </div>
               ) : (
                 <p className="text-[10px] font-semibold" style={{ color: C.success }}>✓ Aprovado por você</p>
               )}
+              {/* Show client thread: own comments + PO replies */}
+              <ClientSignalThread itemId={v.id} refresh={refresh} />
             </div>
           )
         })}
@@ -693,6 +917,7 @@ function PortalHeader({
 
 // ─── PAGE ─────────────────────────────────────────────────────────────────────
 export default function ClientPortalPage() {
+  const { toasts, add: showToast } = useLocalToast()
   const [selected, setSelected] = useState<Set<string>>(new Set(['p1']))
 
   function toggleProject(id: string) {
@@ -742,7 +967,7 @@ export default function ClientPortalPage() {
             {isSingle && singleProject && (
               <>
                 <ProgressCard project={singleProject} />
-                <SprintDeliveriesCard projectFilter={selected} />
+                <SprintDeliveriesCard projectFilter={selected} onComment={showToast} />
               </>
             )}
             {/* Card 3: Project count */}
@@ -752,7 +977,7 @@ export default function ClientPortalPage() {
             {/* Card 5: Risks */}
             <RisksCard />
             {/* Card 6: Awaiting validation (action required) */}
-            <ValidationCard />
+            <ValidationCard onComment={showToast} />
             {/* Card 7: Published roadmap */}
             <RoadmapCard />
             {/* Card 8: Recent deliveries */}
@@ -760,6 +985,8 @@ export default function ClientPortalPage() {
           </div>
         )}
       </div>
+
+      <LocalToastStack toasts={toasts} />
     </div>
   )
 }

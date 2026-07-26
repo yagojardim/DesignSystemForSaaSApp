@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { T } from '../components/ds/tokens'
 import { LogWorkModal } from '../components/LogWorkModal'
 import { AddRelationModal } from '../components/AddRelationModal'
 import { AddSubtaskModal } from '../components/AddSubtaskModal'
+import { getCommentsForProject, markReadByPo, addPoReply, type ClientSignal } from '../data/clientSignals'
+import { MOCK_TENANT } from '../data/session'
 
 // ─── RULE: mover para Done abre tela de transição (resolução, evidência, comentário)
 
@@ -213,6 +215,138 @@ function MetaSelect({ value, options, onChange }: { value: string; options: stri
   )
 }
 
+// ─── Client signals section (inside Comentários tab) ─────────────────────────
+function ClientSignalsSection({ signals, onReply }: { signals: ClientSignal[]; onReply: () => void }) {
+  const [replyingTo, setReplyingTo] = useState<string | null>(null)
+  const [replyText, setReplyText] = useState('')
+
+  function submitReply(sigId: string) {
+    const text = replyText.trim()
+    if (!text) return
+    addPoReply(sigId, text, 'Beatriz Alves')
+    setReplyText('')
+    setReplyingTo(null)
+    onReply()
+  }
+
+  return (
+    <div
+      className="rounded-xl overflow-hidden"
+      style={{ border:`1px solid ${T.accent}30`, background:`${T.accent}06` }}
+    >
+      {/* Section header */}
+      <div
+        className="flex items-center justify-between px-4 py-2.5"
+        style={{ background:`${T.accent}10`, borderBottom:`1px solid ${T.accent}20` }}
+      >
+        <div className="flex items-center gap-2">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ color:T.accent }}>
+            <path d="M6 1a5 5 0 1 1 0 10A5 5 0 0 1 6 1z" stroke="currentColor" strokeWidth="1.2"/>
+            <path d="M4 5.5h4M4 7.5h2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+          </svg>
+          <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color:T.accent }}>Mensagens do Cliente</span>
+          <span className="text-[9px] font-bold px-1.5 py-px rounded-full" style={{ background:T.accentDim, color:T.accent }}>{signals.length}</span>
+        </div>
+        <span className="text-[9px]" style={{ color:T.text3 }}>Visível somente para P.O e superiores · não vaza para a equipe</span>
+      </div>
+
+      <div className="px-4 py-3 space-y-3">
+        {signals.map(sig => (
+          <div key={sig.id}>
+            {/* Client message */}
+            <div className="flex gap-2.5">
+              <span
+                className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0 text-white"
+                style={{ background: T.accent }}
+              >{sig.author_initials}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[11px] font-semibold" style={{ color:T.text1 }}>{sig.author}</span>
+                  <span
+                    className="text-[9px] font-bold px-1.5 py-px rounded-full"
+                    style={{ color:T.accent, background:T.accentDim, border:`1px solid ${T.accent}30` }}
+                  >Cliente</span>
+                  <span className="text-[10px]" style={{ color:T.text3 }}>
+                    {new Date(sig.created_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}
+                  </span>
+                  {!sig.read_by_po && (
+                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background:T.crit }} />
+                  )}
+                </div>
+                <p className="text-[12px] leading-relaxed px-3 py-2 rounded-xl" style={{ background:T.bgSurface, border:`1px solid ${T.border}`, color:T.text2 }}>
+                  {sig.body}
+                </p>
+                {/* Acerca do item */}
+                <p className="text-[9px] mt-1 ml-1" style={{ color:T.text3 }}>
+                  Re: {sig.item_title}
+                </p>
+
+                {/* PO reply already exists */}
+                {sig.po_reply && (
+                  <div className="mt-2 ml-4 flex gap-2">
+                    <span
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold flex-shrink-0 text-white"
+                      style={{ background:T.success }}
+                    >BA</span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-[11px] font-semibold" style={{ color:T.text1 }}>Beatriz Alves (P.O)</span>
+                        <span
+                          className="text-[9px] px-1.5 py-px rounded-full font-semibold"
+                          style={{ color:T.success, background:T.successDim }}
+                        >resposta pública</span>
+                      </div>
+                      <p className="text-[12px] leading-relaxed px-3 py-2 rounded-xl" style={{ background:T.bgSurface, border:`1px solid ${T.success}30`, color:T.text2 }}>{sig.po_reply}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Reply button */}
+                {!sig.po_reply && replyingTo !== sig.id && (
+                  <button
+                    onClick={() => { setReplyingTo(sig.id); setReplyText('') }}
+                    className="text-[10px] mt-1.5 ml-1 transition-colors"
+                    style={{ color:T.text3 }}
+                    onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.color=T.accent}}
+                    onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.color=T.text3}}
+                  >↩ Responder publicamente</button>
+                )}
+
+                {/* Reply compose */}
+                {replyingTo === sig.id && (
+                  <div className="mt-2 ml-4">
+                    <textarea
+                      autoFocus
+                      value={replyText}
+                      onChange={e => setReplyText(e.target.value)}
+                      rows={2}
+                      placeholder="Sua resposta será visível ao cliente no portal..."
+                      className="w-full px-3 py-2 text-[12px] rounded-xl border outline-none resize-none font-[inherit]"
+                      style={{ background:T.bgSurface, border:`1px solid ${T.border}`, color:T.text1 }}
+                      onFocus={e=>{e.currentTarget.style.borderColor=T.accent}}
+                      onBlur={e=>{e.currentTarget.style.borderColor=T.border}}
+                    />
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-[9px] flex-1" style={{ color:T.text3 }}>Resposta pública — o cliente verá no portal</span>
+                      <button onClick={() => { setReplyingTo(null); setReplyText('') }} className="text-[11px]" style={{ color:T.text3 }}>Cancelar</button>
+                      <button
+                        onClick={() => submitReply(sig.id)}
+                        disabled={!replyText.trim()}
+                        className="h-6 px-3 text-[11px] font-semibold rounded-lg text-white"
+                        style={{ background: replyText.trim() ? T.success : T.text3 }}
+                      >Publicar resposta</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Test step result toggle ───────────────────────────────────────────────────
 const RESULTS: Array<TestStep['result']> = ['PASS', 'FAIL', 'BLOCKED', null]
 const RESULT_CFG: Record<string, { color: string; bg: string }> = {
@@ -290,6 +424,22 @@ export default function IssueDetailPage() {
     { type:'Bloqueia',     key:'PM-107', title:'Spec de nav + componente footer', status:'in-review'   },
     { type:'Relacionado a',key:'PM-108', title:'UX study: design Northwind',      status:'in-review'   },
   ]
+
+  // Client signals (read from shared store — project scoped, re-derives on tab switch)
+  const [, forceUpdate] = useState(0)
+  const clientSignals = getCommentsForProject('Website Relaunch', MOCK_TENANT.tenant_id)
+
+  // Mark unread as read when PO opens the Comentários tab
+  useEffect(() => {
+    if (actTab === 'Comentários') {
+      const unread = clientSignals.filter(s => !s.read_by_po)
+      if (unread.length > 0) {
+        unread.forEach(s => markReadByPo(s.id))
+        forceUpdate(n => n + 1)
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actTab])
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
   function handleStatusChange(newS: string) {
@@ -507,6 +657,18 @@ export default function IssueDetailPage() {
             {/* Comentários */}
             {actTab==='Comentários' && (
               <div className="space-y-4">
+
+                {/* ── Client signals section ── */}
+                {clientSignals.length > 0 && (
+                  <ClientSignalsSection signals={clientSignals} onReply={() => forceUpdate(n => n + 1)} />
+                )}
+
+                {/* ── Internal team comments ── */}
+                <div className="flex items-center gap-2 py-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color:T.text3 }}>Comentários da equipe</span>
+                  <div className="flex-1 h-px" style={{ background:T.border }} />
+                </div>
+
                 {comments.map((c,i) => (
                   <div key={i} className="flex gap-3">
                     <Av i={c.author} size={28} />
@@ -519,13 +681,13 @@ export default function IssueDetailPage() {
                     </div>
                   </div>
                 ))}
-                {/* Compose */}
+                {/* Compose — internal */}
                 <div className="flex gap-3">
                   <Av i="AL" size={28} />
                   <div className="flex-1">
                     <textarea
                       value={newComment} onChange={e=>setNewComment(e.target.value)}
-                      rows={2} placeholder="Adicionar comentário..."
+                      rows={2} placeholder="Adicionar comentário interno..."
                       className="w-full px-3 py-2 text-[12px] rounded-xl border outline-none resize-none font-[inherit]"
                       style={{ background:T.bgSurface, border:`1px solid ${T.border}`, color:T.text1 }}
                       onFocus={e=>{e.currentTarget.style.borderColor=T.accent}}

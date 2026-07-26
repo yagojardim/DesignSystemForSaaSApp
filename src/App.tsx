@@ -25,13 +25,15 @@ import LoginPage from './pages/LoginPage'
 import ClientAccessPage from './pages/ClientAccessPage'
 import ClientLoginPage from './pages/ClientLoginPage'
 import DashboardHomePage from './pages/DashboardHomePage'
+import TeamPage from './pages/TeamPage'
+import MyTasksPage from './pages/MyTasksPage'
 import { setActiveUser, MOCK_USERS } from './data/session'
 import InviteMemberModal from './components/InviteMemberModal'
 
 const ALL_VIEWS: View[] = [
   'home','foundations','projects-list','gantt','calendar','dashboard','project',
   'list','timeline','epics','releases','filters','navigator',
-  'reports','automations','config',
+  'reports','automations','config','team','my-tasks',
   'issue','client','task-drawer',
   'login','client-access','client-login',
 ]
@@ -42,6 +44,7 @@ export const VIEW_LABELS: Record<View, string> = {
   list:'Lista', timeline:'Timeline', epics:'Épicos', releases:'Releases',
   filters:'Filtros', navigator:'Issue Navigator',
   reports:'Relatórios', automations:'Automações', config:'Configurações',
+  team:'Time & Permissões', 'my-tasks':'Minha Fila',
   issue:'Issue Detail', client:'Portal Cliente', 'task-drawer':'Task Drawer',
   login:'Login — Gestão', 'role-dashboard':'Dashboard por Papel',
   'client-access':'Criar Acesso de Cliente', 'client-login':'Login — Portal',
@@ -152,6 +155,8 @@ function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void })
         {view==='reports'       && <div className="h-full overflow-y-auto dark-shell"><ReportsPage/></div>}
         {view==='automations'   && <div className="h-full overflow-hidden dark-shell"><AutomationsPage/></div>}
         {view==='config'        && <div className="h-full overflow-hidden dark-shell"><ConfigPage/></div>}
+        {view==='team'          && <div className="h-full overflow-y-auto dark-shell"><TeamPage onInvite={() => setInvite(true)} /></div>}
+        {view==='my-tasks'      && <div className="h-full overflow-y-auto dark-shell"><MyTasksPage onNav={v => { if (ALL_VIEWS.includes(v as View)) setView(v as View) }} /></div>}
         {view==='dashboard'     && <div className="h-full overflow-y-auto dark-shell" style={{ background:'var(--bg-page,#0d1321)' }}><DashboardPage/></div>}
         {view==='project'       && <div className="h-full overflow-hidden dark-shell"><ProjectPage/></div>}
         {view==='issue'         && <div className="h-full overflow-hidden dark-shell"><IssueDetailPage/></div>}

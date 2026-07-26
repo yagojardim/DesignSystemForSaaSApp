@@ -3,7 +3,7 @@ import { Avatar } from './ds/Avatar'
 import { T } from './ds/tokens'
 import type { Role } from './Sidebar'
 
-type View = 'home' | 'foundations' | 'dashboard' | 'project' | 'issue' | 'client' | 'task-drawer' | 'projects-list' | 'gantt' | 'calendar' | 'list' | 'timeline' | 'epics' | 'releases' | 'filters' | 'navigator' | 'reports' | 'automations' | 'config' | 'login' | 'role-dashboard' | 'client-access' | 'client-login'
+type View = 'home' | 'foundations' | 'dashboard' | 'project' | 'issue' | 'client' | 'task-drawer' | 'projects-list' | 'gantt' | 'calendar' | 'list' | 'timeline' | 'epics' | 'releases' | 'filters' | 'navigator' | 'reports' | 'automations' | 'config' | 'team' | 'my-tasks' | 'login' | 'role-dashboard' | 'client-access' | 'client-login'
 
 interface HeaderProps {
   onCreateIssue?: () => void
@@ -30,6 +30,8 @@ const viewLabels: Record<View, string> = {
   'reports':       'Relatórios & Insights',
   'automations':   'Automações',
   'config':        'Configurações',
+  'team':          'Time & Permissões',
+  'my-tasks':      'Minha Fila',
   'login':          'Login — Gestão',
   'role-dashboard': 'Dashboard por Papel',
   'client-access':  'Criar Acesso de Cliente',

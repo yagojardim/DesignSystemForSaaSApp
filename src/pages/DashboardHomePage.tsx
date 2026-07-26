@@ -11,10 +11,15 @@ import {
   MOCK_TENANT, MOCK_USERS, getActiveScope, getActiveUser, setActiveUser,
   DASHBOARD_CATALOG, type UserScope, type DashboardType,
 } from '../data/session'
+// MOCK_TENANT used in ProductOwnerPanel for client feed scoping
 import {
   WORK_ITEMS, getBlockedItems, getSprintItems, getReadyItems,
   getTestingItems, getBacklogWithAlerts,
 } from '../data/workItems'
+import {
+  getAllForPo, getUnreadForPo, markReadByPo, markAllReadByPo,
+  type ClientSignal,
+} from '../data/clientSignals'
 
 // ─── Shared hook: drawer + nav + filter state ─────────────────────────────────
 function useDrawer() {
@@ -83,12 +88,12 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
   return (
     <>
       <Grid cols="repeat(6,1fr)">
-        <KpiCard value="11" label="Usuários" sub="9 ativos" onClick={() => onNav('config')} />
+        <KpiCard value="11" label="Usuários" sub="9 ativos" onClick={() => onNav('team')} />
         <KpiCard value="3"  label="Projetos" sub="2 ativos" onClick={() => onNav('projects-list')} />
         <KpiCard value="5"  label="Boards"   sub="4 ativos" onClick={() => onNav('project')} />
         <KpiCard value="3"  label="Módulos ativos" sub="de 6" onClick={() => onNav('config')} />
-        <KpiCard value="1"  label="Bloqueados" sub="João Prado" color={T.crit} alert onClick={() => onNav('config')} />
-        <KpiCard value="2"  label="Convites" sub="expiram em 7d" color={T.warn} onClick={() => onNav('config')} />
+        <KpiCard value="1"  label="Bloqueados" sub="João Prado" color={T.crit} alert onClick={() => onNav('team')} />
+        <KpiCard value="2"  label="Convites" sub="expiram em 7d" color={T.warn} onClick={() => onNav('team')} />
       </Grid>
 
       <div style={{ marginTop: 12 }}>
@@ -97,7 +102,7 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
 
       <Grid cols="2fr 1fr">
         <SCard title="Gestão de Usuários" action={
-          <button onClick={() => onNav('config')} style={{ fontSize: 11, color: T.accent, background: 'none', border: 'none', cursor: 'pointer' }}>Ver todos →</button>
+          <button onClick={() => onNav('team')} style={{ fontSize: 11, color: T.accent, background: 'none', border: 'none', cursor: 'pointer' }}>Ver time →</button>
         }>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {users.map(u => (
@@ -344,12 +349,103 @@ function ProductManagerPanel({ onNav }: { onNav: (v: string) => void }) {
   )
 }
 
+// ─── Client Feed Card (PO-only) ───────────────────────────────────────────────
+function ClientFeedCard({ poId, tenantId }: { poId: string; tenantId: string }) {
+  const [tick, setTick] = useState(0)
+  const signals  = getAllForPo(poId, tenantId)
+  const unread   = getUnreadForPo(poId, tenantId)
+
+  function handleMarkAllRead() {
+    markAllReadByPo(poId, tenantId)
+    setTick(t => t + 1)
+  }
+
+  // tick used to force re-render after mark-read mutations
+  void tick
+
+  const TYPE_ICON: Record<ClientSignal['type'], string> = { comment: '💬', approval: '✓' }
+  const TYPE_COLOR: Record<ClientSignal['type'], string> = { comment: T.accent, approval: T.success }
+
+  return (
+    <SCard
+      title="Mensagens do Cliente"
+      action={unread.length > 0 ? (
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:99, background:T.crit, color:'#fff' }}>
+            {unread.length} novo{unread.length > 1 ? 's' : ''}
+          </span>
+          <button
+            onClick={handleMarkAllRead}
+            style={{ fontSize:10, color:T.text3, cursor:'pointer', background:'none', border:'none', padding:0 }}
+            onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.color=T.accent}}
+            onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.color=T.text3}}
+          >
+            Lidas
+          </button>
+        </div>
+      ) : undefined}
+    >
+      {signals.length === 0 ? (
+        <p style={{ fontSize:12, color:T.text3, textAlign:'center', padding:'12px 0' }}>Nenhuma mensagem do cliente.</p>
+      ) : (
+        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+          {signals.slice(0, 5).map(s => (
+            <div
+              key={s.id}
+              onClick={() => { markReadByPo(s.id); setTick(t => t + 1) }}
+              style={{
+                display:'flex', alignItems:'flex-start', gap:8,
+                padding:'8px 10px', borderRadius:8, cursor:'pointer',
+                background: !s.read_by_po ? `${T.accent}08` : T.bgPage,
+                border:`1px solid ${!s.read_by_po ? T.accent + '30' : T.border}`,
+                borderLeft:`3px solid ${TYPE_COLOR[s.type]}`,
+                transition:'background 0.15s',
+              }}
+              onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background=T.bgSurface2}}
+              onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.background=!s.read_by_po?`${T.accent}08`:T.bgPage}}
+            >
+              <span style={{ fontSize:13, flexShrink:0, marginTop:1 }}>{TYPE_ICON[s.type]}</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
+                  <span style={{ fontSize:11, fontWeight:600, color:T.text1 }}>{s.author}</span>
+                  <span style={{ fontSize:9, fontWeight:700, padding:'1px 5px', borderRadius:99, color:TYPE_COLOR[s.type], background:`${TYPE_COLOR[s.type]}18` }}>
+                    {s.type === 'comment' ? 'comentário' : 'aprovação'}
+                  </span>
+                  {!s.read_by_po && <span style={{ width:6, height:6, borderRadius:'50%', background:T.crit, flexShrink:0 }} />}
+                </div>
+                {s.body && (
+                  <p style={{ fontSize:11, color:T.text2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:260 }}>
+                    {s.body}
+                  </p>
+                )}
+                <p style={{ fontSize:9, color:T.text3, marginTop:2 }}>
+                  {s.item_title} · {s.project}
+                </p>
+              </div>
+              <span style={{ fontSize:9, color:T.text3, flexShrink:0, marginTop:2 }}>
+                {new Date(s.created_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'short' })}
+              </span>
+            </div>
+          ))}
+          {signals.length > 5 && (
+            <p style={{ fontSize:10, color:T.text3, textAlign:'center', paddingTop:4 }}>
+              + {signals.length - 5} mais mensagem{signals.length - 5 > 1 ? 's' : ''}
+            </p>
+          )}
+        </div>
+      )}
+    </SCard>
+  )
+}
+
 // ─── 5. PRODUCT OWNER ────────────────────────────────────────────────────────
 function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
   const alertItems = applyFilters(getBacklogWithAlerts('proj_001'), filters)
   const readyItems = applyFilters(getReadyItems('proj_001'), filters)
+
+  const unreadCount = getUnreadForPo('u_po', MOCK_TENANT.tenant_id).length
 
   const team = [
     { name: 'Ana Lima',  i: 'AL', c: '#fb923c', items: 4, status: 'saudável' as const },
@@ -364,7 +460,14 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
         <KpiCard value="62%" label="Cobertura Ready" sub="pts prontos ÷ velocity" onClick={() => onNav('list')} />
         <KpiCard value="54%" label="Saúde do Backlog" sub="itens saudáveis ÷ avaliáveis" color={T.warn} alert onClick={() => onNav('list')} />
         <KpiCard value="68%" label="Progresso Funcional" sub="considera aceite do PO" onClick={() => onNav('reports')} />
-        <KpiCard value="4"   label="Bugs Funcionais" sub="aguardando PO" color={T.crit} alert onClick={() => onNav('list')} />
+        <KpiCard
+          value={unreadCount > 0 ? String(unreadCount) : '0'}
+          label="Msgs do Cliente"
+          sub={unreadCount > 0 ? 'não lidas — ação necessária' : 'sem pendências'}
+          color={unreadCount > 0 ? T.accent : T.text3}
+          alert={unreadCount > 0}
+          onClick={() => onNav('client')}
+        />
       </Grid>
 
       <div style={{ marginTop: 12 }}>
@@ -378,8 +481,10 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <WorkQueue title="Ready para Próxima Sprint" items={readyItems} onOpen={openDrawer}
-            onViewAll={() => onNav('list')} maxItems={4}
+            onViewAll={() => onNav('list')} maxItems={3}
             emptyMsg="Nenhum item ready. Refine o backlog." />
+
+          <ClientFeedCard poId="u_po" tenantId={MOCK_TENANT.tenant_id} />
 
           <SCard title="Time Atuando no Projeto">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

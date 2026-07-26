@@ -6,7 +6,7 @@ export type View =
   | 'home' | 'foundations' | 'dashboard' | 'project' | 'issue' | 'client' | 'task-drawer'
   | 'projects-list' | 'gantt' | 'calendar'
   | 'list' | 'timeline' | 'epics' | 'releases' | 'filters' | 'navigator'
-  | 'reports' | 'automations' | 'config'
+  | 'reports' | 'automations' | 'config' | 'team' | 'my-tasks'
   | 'login' | 'role-dashboard' | 'client-access' | 'client-login'
 
 interface ShellProps {
@@ -17,7 +17,7 @@ interface ShellProps {
 const VALID_VIEWS: View[] = [
   'home','dashboard','project','issue','client','task-drawer','projects-list','gantt','calendar',
   'list','timeline','epics','releases','filters','navigator',
-  'reports','automations','config',
+  'reports','automations','config','team','my-tasks',
   'login','role-dashboard','client-access','client-login',
 ]
 
