@@ -20,6 +20,7 @@ import {
   getAllForPo, getUnreadForPo, markReadByPo, markAllReadByPo,
   type ClientSignal,
 } from '../data/clientSignals'
+import { getAssignedCards, ASSIGNMENT_TARGETS, type AssignmentTarget } from '../data/dashboardAssignments'
 
 // ─── Shared hook: drawer + nav + filter state ─────────────────────────────────
 function useDrawer() {
@@ -863,6 +864,63 @@ function DashboardContent({ type, onNav, onInvite }: { type: DashboardType; onNa
   }
 }
 
+// ─── Assigned Report Cards section ───────────────────────────────────────────
+function AssignedReportCards({ dashId, tenantId, onNav }: { dashId: DashboardType; tenantId: string; onNav: (v: string) => void }) {
+  const target = dashId as AssignmentTarget
+  const assigned = getAssignedCards(tenantId, target)
+  if (assigned.length === 0) return null
+
+  return (
+    <div style={{ marginTop: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Relatórios atribuídos a este dashboard
+        </span>
+        <span style={{
+          fontSize: 10, fontWeight: 700, color: T.accent,
+          background: T.accentDim, border: `1px solid ${T.accentBorder}`,
+          borderRadius: 99, padding: '1px 8px',
+        }}>{assigned.length}</span>
+        <button onClick={() => onNav('reports')} style={{
+          marginLeft: 'auto', fontSize: 11, color: T.accent,
+          background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+        }}>
+          Ver todos os relatórios →
+        </button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+        {assigned.map(a => {
+          const targetDef = ASSIGNMENT_TARGETS.find(t => t.id === target)
+          return (
+            <div key={a.card_id} style={{
+              background: T.bgSurface, border: `1px solid ${T.border}`,
+              borderRadius: 10, padding: '14px 16px',
+              borderLeft: `3px solid ${T.accent}`,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: T.text1, marginBottom: 3 }}>{a.card_title}</div>
+                  <div style={{ fontSize: 10, color: T.text3 }}>
+                    {targetDef?.icon} Atribuído a este dashboard
+                    {a.targets.length > 1 && ` + ${a.targets.length - 1} outro${a.targets.length > 2 ? 's' : ''}`}
+                  </div>
+                </div>
+                <button onClick={() => onNav('reports')} style={{
+                  fontSize: 11, color: T.accent, background: T.accentDim,
+                  border: `1px solid ${T.accentBorder}`, borderRadius: 5,
+                  padding: '3px 9px', cursor: 'pointer', flexShrink: 0,
+                }}>
+                  Abrir →
+                </button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── Inspection user switcher ─────────────────────────────────────────────────
 function InspectionSwitcher({ onUserChange }: { onUserChange: () => void }) {
   const [open, setOpen] = useState(false)
@@ -978,6 +1036,9 @@ export default function DashboardHomePage({ onNav, onInvite }: Props) {
 
       {/* ── Dashboard content ───────────────────────────────────── */}
       <DashboardContent type={activeDashId} onNav={navigate} onInvite={onInvite} />
+
+      {/* ── Assigned report cards ───────────────────────────────── */}
+      <AssignedReportCards dashId={activeDashId} tenantId={MOCK_TENANT.tenant_id} onNav={navigate} />
     </div>
   )
 }

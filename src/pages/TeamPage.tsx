@@ -63,7 +63,8 @@ const CAP_LABELS: Record<Capability, string> = {
   'project:create':       'Criar Projetos',
   'users:manage':         'Gerenciar Usuários',
   'module:request':       'Solicitar Módulos',
-  'access:client-portal': 'Portal do Cliente',
+  'access:client-portal':    'Portal do Cliente',
+  'manage:dashboard-cards':  'Gerenciar Cards de Dashboard',
 }
 
 // ─── Status helpers ────────────────────────────────────────────────────────────

@@ -105,16 +105,31 @@ function EventChip({ ev, onClick }: { ev: CalendarEvent; onClick: () => void }) 
 }
 
 // ─── Issue due-date chip (read-only) ─────────────────────────────────────────
+const PRIORITY_DOT: Record<string, string> = {
+  critical: '#EF4444', high: '#F59E0B', medium: '#3B82F6', low: '#5C5C7A',
+}
 function IssueDueChip({ issue }: { issue: Issue }) {
+  const dotColor = PRIORITY_DOT[issue.priority] ?? T.text3
+  const isOverdue = new Date(issue.dueDateIso) < new Date() && issue.status !== 'done'
   return (
     <div style={{
-      background: `${T.text3}12`, borderLeft: `2px solid ${T.text3}`,
-      borderRadius: 3, padding: '1px 5px', fontSize: 9, color: T.text2,
+      background: isOverdue ? `${dotColor}18` : `${T.text3}10`,
+      borderLeft: `2px solid ${isOverdue ? dotColor : T.text3}`,
+      borderRadius: 3, padding: '1px 5px', fontSize: 9,
+      color: isOverdue ? dotColor : T.text2,
       whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2,
-    }} title={`Prazo: ${issue.key} – ${issue.title}`}>
-      ⏰ {issue.key}
+      display: 'flex', alignItems: 'center', gap: 3,
+    }} title={`Prazo: ${issue.key} – ${issue.title}${isOverdue ? ' (atrasado)' : ''}`}>
+      <span style={{ fontSize: 8 }}>⏰</span>
+      <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{issue.key}</span>
+      {issue.blocked && <span style={{ color: '#EF4444', fontSize: 8 }}>🔴</span>}
     </div>
   )
+}
+
+/** Issues due on a given calendar day */
+function issuesDueOnDay(day: Date): Issue[] {
+  return ISSUES.filter(i => sameDay(new Date(i.dueDateIso), day))
 }
 
 // ─── Week event block ─────────────────────────────────────────────────────────
@@ -810,7 +825,7 @@ export default function CalendarPage() {
             {monthRows.flat().map((day, idx) => {
               const isToday  = day ? sameDay(day, today) : false
               const dayEvs   = day ? eventsForDay(events, day) : []
-              const dueIssues = day ? ISSUES.filter(i => i.dueDateDay === day.getDate() && month === 3) : []
+              const dueIssues = day ? issuesDueOnDay(day) : []
               const visible  = dayEvs.slice(0, 3)
               const overflow = dayEvs.length - 3
               return (
@@ -854,7 +869,7 @@ export default function CalendarPage() {
             <div style={{ padding: '5px 6px', fontSize: 9, color: T.text3, borderRight: `1px solid ${T.border}`, textAlign: 'right', paddingTop: 8 }}>tod</div>
             {weekDays.map((day, di) => {
               const allDayEvs = eventsForDay(events, day).filter(e => e.allDay)
-              const duePt = ISSUES.filter(i => i.dueDateDay === day.getDate() && day.getMonth() === 3)
+              const duePt = issuesDueOnDay(day)
               return (
                 <div key={di} style={{ padding: '3px 3px', borderRight: `1px solid ${T.border}`, minHeight: 28 }}>
                   {duePt.slice(0,1).map(i => <IssueDueChip key={i.key} issue={i} />)}

@@ -8,7 +8,17 @@ export type Priority    = 'critical' | 'high' | 'medium' | 'low'
 export interface Issue {
   key:string; type:IssueType; title:string; status:IssueStatus; priority:Priority
   labels:string[]; assignee:string; dueDate:string; dueDateDay:number
+  /** ISO date relative to real today (for calendar view) */
+  dueDateIso: string
   points:number; epic?:string; sprint?:string; blocked?:boolean; delayed?:boolean; releaseId?:string
+}
+
+/** Returns an ISO date string offset by `days` from today (midnight local) */
+function rel(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  d.setHours(0, 0, 0, 0)
+  return d.toISOString()
 }
 export interface Epic    { id:string; key:string; label:string; color:string; desc:string; quarter:string; owner:string }
 export interface Sprint  { id:string; name:string; goal?:string; start:string; end:string; state:'active'|'planned'|'completed'; velocity?:number }
@@ -31,22 +41,22 @@ export const RELEASES: Release[] = [
   { id:'r4', version:'v2.0.0', name:'Plataforma v2',       date:'01 set 2025', state:'planned' },
 ]
 export const ISSUES: Issue[] = [
-  { key:'PM-101', type:'story',   title:'Homepage hero — layout explorations',        status:'in-progress', priority:'high',     labels:['Design','Hero'],   assignee:'AL', dueDate:'Abr 4',  dueDateDay:4,  points:5, epic:'EP-01', sprint:'s14', releaseId:'r2' },
-  { key:'PM-102', type:'bug',     title:'Login form validation falha no mobile',      status:'in-progress', priority:'critical', labels:['Eng'],             assignee:'JN', dueDate:'Abr 3',  dueDateDay:3,  points:3, epic:'EP-02', sprint:'s14', blocked:true },
-  { key:'PM-103', type:'task',    title:'Configurar Storybook para componentes',      status:'in-progress', priority:'medium',   labels:['Eng'],             assignee:'LF', dueDate:'Abr 6',  dueDateDay:6,  points:2, epic:'EP-02', sprint:'s14', releaseId:'r2' },
-  { key:'PM-104', type:'story',   title:'Breakpoints responsivos — hero + grid',      status:'in-progress', priority:'high',     labels:['Design','Mobile'], assignee:'CS', dueDate:'Abr 9',  dueDateDay:9,  points:8, epic:'EP-01', sprint:'s14', delayed:true, releaseId:'r2' },
-  { key:'PM-105', type:'bug',     title:'Footer sobrepõe conteúdo no Safari',        status:'todo',        priority:'medium',   labels:['Eng','Web'],       assignee:'NM', dueDate:'Abr 10', dueDateDay:10, points:2, epic:'EP-02', sprint:'s14' },
-  { key:'PM-107', type:'task',    title:'Spec de nav + componente footer',           status:'in-review',   priority:'low',      labels:['Design'],          assignee:'AL', dueDate:'Abr 3',  dueDateDay:3,  points:3, epic:'EP-01', sprint:'s14', releaseId:'r2' },
-  { key:'PM-108', type:'story',   title:'UX study: design Northwind',               status:'in-review',   priority:'medium',   labels:['UX','SEO'],        assignee:'JN', dueDate:'Abr 5',  dueDateDay:5,  points:5, epic:'EP-03', sprint:'s14' },
-  { key:'PM-106', type:'story',   title:'Copywriting da página de preços v2',        status:'backlog',     priority:'high',     labels:['Content'],         assignee:'NM', dueDate:'Abr 22', dueDateDay:22, points:5, epic:'EP-03', sprint:'s15', releaseId:'r3' },
-  { key:'PM-109', type:'story',   title:'Entrevistas com 5 clientes trial',         status:'backlog',     priority:'medium',   labels:['Research'],        assignee:'JN', dueDate:'Abr 16', dueDateDay:16, points:5, epic:'EP-03', sprint:'s15' },
-  { key:'PM-110', type:'task',    title:'Auditoria de a11y nas páginas',            status:'backlog',     priority:'medium',   labels:['Design','Web'],    assignee:'AL', dueDate:'Abr 12', dueDateDay:12, points:3, epic:'EP-01', sprint:'s15', releaseId:'r2' },
-  { key:'PM-111', type:'story',   title:'Teardown competitivo — 8 sites',           status:'done',        priority:'low',      labels:['Research'],        assignee:'RM', dueDate:'Mar 28', dueDateDay:1,  points:3, epic:'EP-03', sprint:'s13', releaseId:'r1' },
-  { key:'PM-112', type:'task',    title:'Finalizar tokens de cor + tipografia',     status:'done',        priority:'medium',   labels:['Brand'],           assignee:'NM', dueDate:'Mar 28', dueDateDay:1,  points:2, epic:'EP-01', sprint:'s13', releaseId:'r1' },
-  { key:'PM-113', type:'task',    title:'Scaffolding do repositório + CI pipeline', status:'done',        priority:'high',     labels:['Eng'],             assignee:'LF', dueDate:'Mar 22', dueDateDay:1,  points:2, epic:'EP-02', sprint:'s13', releaseId:'r1' },
-  { key:'PM-114', type:'story',   title:'Auditoria de metadata SEO',               status:'backlog',     priority:'low',      labels:['SEO'],             assignee:'RM', dueDate:'Mai 5',  dueDateDay:28, points:3, epic:'EP-03', releaseId:'r3' },
-  { key:'PM-115', type:'subtask', title:'Escrever copy do hero principal',          status:'backlog',     priority:'low',      labels:['Content'],         assignee:'NM', dueDate:'Abr 8',  dueDateDay:8,  points:1, epic:'EP-01' },
-  { key:'PM-116', type:'feature', title:'Sistema de busca do portal',              status:'backlog',     priority:'medium',   labels:['Eng'],             assignee:'LF', dueDate:'Mai 20', dueDateDay:30, points:8, epic:'EP-02', releaseId:'r4' },
+  { key:'PM-101', type:'story',   title:'Homepage hero — layout explorations',        status:'in-progress', priority:'high',     labels:['Design','Hero'],   assignee:'AL', dueDate:'Abr 4',  dueDateDay:4,  dueDateIso:rel(-1), points:5, epic:'EP-01', sprint:'s14', releaseId:'r2' },
+  { key:'PM-102', type:'bug',     title:'Login form validation falha no mobile',      status:'in-progress', priority:'critical', labels:['Eng'],             assignee:'JN', dueDate:'Abr 3',  dueDateDay:3,  dueDateIso:rel(0),  points:3, epic:'EP-02', sprint:'s14', blocked:true },
+  { key:'PM-103', type:'task',    title:'Configurar Storybook para componentes',      status:'in-progress', priority:'medium',   labels:['Eng'],             assignee:'LF', dueDate:'Abr 6',  dueDateDay:6,  dueDateIso:rel(2),  points:2, epic:'EP-02', sprint:'s14', releaseId:'r2' },
+  { key:'PM-104', type:'story',   title:'Breakpoints responsivos — hero + grid',      status:'in-progress', priority:'high',     labels:['Design','Mobile'], assignee:'CS', dueDate:'Abr 9',  dueDateDay:9,  dueDateIso:rel(3),  points:8, epic:'EP-01', sprint:'s14', delayed:true, releaseId:'r2' },
+  { key:'PM-105', type:'bug',     title:'Footer sobrepõe conteúdo no Safari',        status:'todo',        priority:'medium',   labels:['Eng','Web'],       assignee:'NM', dueDate:'Abr 10', dueDateDay:10, dueDateIso:rel(4),  points:2, epic:'EP-02', sprint:'s14' },
+  { key:'PM-107', type:'task',    title:'Spec de nav + componente footer',           status:'in-review',   priority:'low',      labels:['Design'],          assignee:'AL', dueDate:'Abr 3',  dueDateDay:3,  dueDateIso:rel(0),  points:3, epic:'EP-01', sprint:'s14', releaseId:'r2' },
+  { key:'PM-108', type:'story',   title:'UX study: design Northwind',               status:'in-review',   priority:'medium',   labels:['UX','SEO'],        assignee:'JN', dueDate:'Abr 5',  dueDateDay:5,  dueDateIso:rel(1),  points:5, epic:'EP-03', sprint:'s14' },
+  { key:'PM-106', type:'story',   title:'Copywriting da página de preços v2',        status:'backlog',     priority:'high',     labels:['Content'],         assignee:'NM', dueDate:'Abr 22', dueDateDay:22, dueDateIso:rel(14), points:5, epic:'EP-03', sprint:'s15', releaseId:'r3' },
+  { key:'PM-109', type:'story',   title:'Entrevistas com 5 clientes trial',         status:'backlog',     priority:'medium',   labels:['Research'],        assignee:'JN', dueDate:'Abr 16', dueDateDay:16, dueDateIso:rel(8),  points:5, epic:'EP-03', sprint:'s15' },
+  { key:'PM-110', type:'task',    title:'Auditoria de a11y nas páginas',            status:'backlog',     priority:'medium',   labels:['Design','Web'],    assignee:'AL', dueDate:'Abr 12', dueDateDay:12, dueDateIso:rel(6),  points:3, epic:'EP-01', sprint:'s15', releaseId:'r2' },
+  { key:'PM-111', type:'story',   title:'Teardown competitivo — 8 sites',           status:'done',        priority:'low',      labels:['Research'],        assignee:'RM', dueDate:'Mar 28', dueDateDay:1,  dueDateIso:rel(-7), points:3, epic:'EP-03', sprint:'s13', releaseId:'r1' },
+  { key:'PM-112', type:'task',    title:'Finalizar tokens de cor + tipografia',     status:'done',        priority:'medium',   labels:['Brand'],           assignee:'NM', dueDate:'Mar 28', dueDateDay:1,  dueDateIso:rel(-5), points:2, epic:'EP-01', sprint:'s13', releaseId:'r1' },
+  { key:'PM-113', type:'task',    title:'Scaffolding do repositório + CI pipeline', status:'done',        priority:'high',     labels:['Eng'],             assignee:'LF', dueDate:'Mar 22', dueDateDay:1,  dueDateIso:rel(-3), points:2, epic:'EP-02', sprint:'s13', releaseId:'r1' },
+  { key:'PM-114', type:'story',   title:'Auditoria de metadata SEO',               status:'backlog',     priority:'low',      labels:['SEO'],             assignee:'RM', dueDate:'Mai 5',  dueDateDay:28, dueDateIso:rel(21), points:3, epic:'EP-03', releaseId:'r3' },
+  { key:'PM-115', type:'subtask', title:'Escrever copy do hero principal',          status:'backlog',     priority:'low',      labels:['Content'],         assignee:'NM', dueDate:'Abr 8',  dueDateDay:8,  dueDateIso:rel(5),  points:1, epic:'EP-01' },
+  { key:'PM-116', type:'feature', title:'Sistema de busca do portal',              status:'backlog',     priority:'medium',   labels:['Eng'],             assignee:'LF', dueDate:'Mai 20', dueDateDay:30, dueDateIso:rel(28), points:8, epic:'EP-02', releaseId:'r4' },
 ]
 export const DEPENDENCIES: { from:string; to:string }[] = [
   { from:'PM-102', to:'PM-107' },

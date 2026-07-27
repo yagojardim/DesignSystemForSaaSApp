@@ -43,6 +43,7 @@ export type Capability =
   | 'users:manage'
   | 'module:request'
   | 'access:client-portal'
+  | 'manage:dashboard-cards'
 
 // ─── Matrix: for each capability, which roles have it by default vs opt-in ───
 interface CapabilityRule {
@@ -141,6 +142,11 @@ export const PERMISSION_MATRIX: Record<Capability, CapabilityRule> = {
     default: ['Admin','PMO','ProjectManager','ProductManager','ProductOwner'],
     optIn:   ['ScrumMaster','TechLead'],
     hidden:  ['Dev','QA','UX'],
+  },
+  'manage:dashboard-cards': {
+    default: ['Admin','PMO'],
+    optIn:   ['ProjectManager'],
+    hidden:  ['ProductManager','ProductOwner','ScrumMaster','TechLead','Dev','QA','UX'],
   },
 }
 
