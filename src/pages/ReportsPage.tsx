@@ -207,22 +207,25 @@ function AssignBadge({ count, onClick }: { count: number; onClick: (e: React.Mou
   )
 }
 
-// ── Pin button (hover) ────────────────────────────────────────────────────────
-function PinButton({ onClick }: { onClick: (e: React.MouseEvent) => void }) {
+// ── Pin button ────────────────────────────────────────────────────────────────
+function PinButton({ onClick, disabled }: { onClick: (e: React.MouseEvent) => void; disabled?: boolean }) {
   const [hover, setHover] = useState(false)
   return (
     <button
-      onClick={e => { e.stopPropagation(); onClick(e) }}
-      onMouseEnter={() => setHover(true)}
+      onClick={disabled ? undefined : e => { e.stopPropagation(); onClick(e) }}
+      onMouseEnter={() => !disabled && setHover(true)}
       onMouseLeave={() => setHover(false)}
-      title="Atribuir a dashboards"
+      title={disabled ? 'Requer permissão: Gerenciar Cards de Dashboard' : 'Atribuir a dashboards'}
+      disabled={disabled}
       style={{
         display: 'flex', alignItems: 'center', gap: 5,
         padding: '4px 9px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-        background: hover ? T.accent : T.bgSurface2,
-        color: hover ? '#fff' : T.text2,
-        border: `1px solid ${hover ? T.accent : T.border}`,
-        cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0,
+        background: disabled ? `${T.text3}0A` : hover ? T.accent : T.bgSurface2,
+        color:      disabled ? T.text3        : hover ? '#fff'   : T.text2,
+        border: `1px solid ${disabled ? T.border : hover ? T.accent : T.border}`,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        transition: 'all 0.15s', flexShrink: 0,
+        opacity: disabled ? 0.6 : 1,
       }}
     >
       <span style={{ fontSize: 12 }}>📌</span> Atribuir
@@ -241,12 +244,16 @@ interface ReportCardProps {
 
 function ReportCard({ def, canManage, tick, onAssign, children }: ReportCardProps) {
   const [hovered, setHovered] = useState(false)
-  const btnRef = useRef<HTMLButtonElement>(null)
+  const pinBtnRef = useRef<HTMLButtonElement>(null)
   const tid = MOCK_TENANT.tenant_id
 
   void tick  // triggers re-render on store change
   const assignment = getAssignment(tid, def.id)
   const count = assignment?.targets.length ?? 0
+
+  function handleAssign() {
+    if (pinBtnRef.current) onAssign(def, pinBtnRef.current)
+  }
 
   return (
     <div
@@ -271,30 +278,19 @@ function ReportCard({ def, canManage, tick, onAssign, children }: ReportCardProp
           <div style={{ color: T.text1, fontWeight: 600, fontSize: px(14) }}>{def.title}</div>
           <div style={{ color: T.text3, fontSize: px(12), marginTop: px(2) }}>{def.subtitle}</div>
         </div>
-        {/* Assignment controls */}
-        {canManage && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            opacity: (hovered || count > 0) ? 1 : 0,
-            transition: 'opacity 0.2s',
-            flexShrink: 0,
-          }}>
-            {count > 0 && (
-              <AssignBadge
-                count={count}
-                onClick={() => btnRef.current && onAssign(def, btnRef.current)}
-              />
-            )}
-            <button
-              ref={btnRef as React.RefObject<HTMLButtonElement>}
-              onClick={e => { e.stopPropagation(); onAssign(def, e.currentTarget) }}
-              style={{ display: 'none' }}
-            />
-            {(hovered || count === 0) && (
-              <PinButton onClick={() => btnRef.current && onAssign(def, btnRef.current)} />
-            )}
-          </div>
-        )}
+
+        {/* Assignment controls — always visible; disabled when no permission */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          {count > 0 && canManage && (
+            <AssignBadge count={count} onClick={handleAssign} />
+          )}
+          {/* Invisible anchor for popover positioning */}
+          <button ref={pinBtnRef} style={{ display: 'none' }} />
+          <PinButton
+            disabled={!canManage}
+            onClick={handleAssign}
+          />
+        </div>
       </div>
 
       {children}
@@ -875,20 +871,24 @@ export default function ReportsPage() {
               Métricas de desempenho da equipe e saúde do projeto.
             </p>
           </div>
-          {canManage && (
-            <button
-              onClick={() => setBatchOpen(true)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 7,
-                padding: `${px(9)} ${px(18)}`, borderRadius: px(8),
-                border: `1px solid ${T.accentBorder}`, background: T.accentDim,
-                color: T.accent, fontSize: px(13), fontWeight: 600, cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <span>⊞</span> Gerenciar atribuições
-            </button>
-          )}
+          <button
+            onClick={canManage ? () => setBatchOpen(true) : undefined}
+            disabled={!canManage}
+            title={!canManage ? 'Requer permissão: Gerenciar Cards de Dashboard' : undefined}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: `${px(9)} ${px(18)}`, borderRadius: px(8),
+              border: `1px solid ${canManage ? T.accentBorder : T.border}`,
+              background: canManage ? T.accentDim : `${T.text3}0A`,
+              color: canManage ? T.accent : T.text3,
+              fontSize: px(13), fontWeight: 600,
+              cursor: canManage ? 'pointer' : 'not-allowed',
+              opacity: canManage ? 1 : 0.6,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span>⊞</span> Gerenciar atribuições
+          </button>
         </div>
 
         {/* Filter row */}

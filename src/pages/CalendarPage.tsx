@@ -674,8 +674,244 @@ function GoogleSyncPanel({ onClose, onConnected }: { onClose: () => void; onConn
   )
 }
 
+// ─── Day / Agenda view ────────────────────────────────────────────────────────
+const ALL_HOURS = Array.from({ length: 24 }, (_, i) => i)
+
+interface DayViewProps {
+  anchor:        Date
+  events:        CalendarEvent[]
+  today:         Date
+  onEventClick:  (ev: CalendarEvent) => void
+  onSlotClick:   (day: Date, hour: number) => void
+}
+
+function DayView({ anchor, events, today, onEventClick, onSlotClick }: DayViewProps) {
+  const isToday   = sameDay(anchor, today)
+  const nowRef    = useRef<HTMLDivElement>(null)
+  const [nowMin, setNowMin] = useState(() => new Date().getHours() * 60 + new Date().getMinutes())
+
+  // Scroll to current hour on mount / when day changes
+  useEffect(() => {
+    nowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [anchor])
+
+  // Update now-indicator every minute
+  useEffect(() => {
+    const id = setInterval(() => setNowMin(new Date().getHours() * 60 + new Date().getMinutes()), 60_000)
+    return () => clearInterval(id)
+  }, [])
+
+  // All-day events for this day
+  const allDayEvs = events.filter(e => e.allDay && sameDay(new Date(e.start), anchor))
+
+  // Due issues for this day
+  const dueIssues = issuesDueOnDay(anchor)
+
+  // Timed events for this day
+  const timedEvs = events.filter(e => !e.allDay && sameDay(new Date(e.start), anchor))
+
+  // Events starting in a given hour
+  function eventsAtHour(h: number): CalendarEvent[] {
+    return timedEvs.filter(e => new Date(e.start).getHours() === h)
+  }
+
+  const nowTopPx = (nowMin / 60) * HOUR_H  // within the 24h scroll area
+
+  const TYPE_COLOR: Record<string, string> = {
+    story: T.accent, bug: T.crit, task: T.text2, subtask: T.text3, epic: T.warn, feature: T.purple ?? '#A78BFA',
+  }
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+      {/* ── Day header ── */}
+      <div style={{ padding: '10px 20px', borderBottom: `1px solid ${T.border}`, background: T.bgSurface, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: isToday ? T.accent : T.text1 }}>
+            {isToday && <span style={{ fontSize: 10, background: T.accent, color: '#fff', borderRadius: 4, padding: '1px 6px', marginRight: 7, fontWeight: 700 }}>HOJE</span>}
+            {DOW_PT[anchor.getDay()]}, {anchor.getDate()} de {MONTHS_PT[anchor.getMonth()]} {anchor.getFullYear()}
+          </div>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: T.text2, background: `${T.text3}10`, border: `1px solid ${T.border}`, borderRadius: 4, padding: '2px 8px' }}>
+              {timedEvs.length} evento{timedEvs.length !== 1 ? 's' : ''}
+            </span>
+            {dueIssues.length > 0 && (
+              <span style={{ fontSize: 11, color: T.warn, background: T.warnDim, border: `1px solid ${T.warn}44`, borderRadius: 4, padding: '2px 8px' }}>
+                ⏰ {dueIssues.length} prazo{dueIssues.length !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* All-day strip */}
+        {(allDayEvs.length > 0 || dueIssues.length > 0) && (
+          <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {allDayEvs.map(ev => (
+              <div
+                key={ev.id}
+                onClick={() => onEventClick(ev)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  background: `${ev.color}22`, border: `1px solid ${ev.color}66`,
+                  borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12, color: T.text1,
+                }}
+              >
+                {ev.source === 'google' && <span style={{ fontSize: 9, fontWeight: 800, color: ev.color }}>G</span>}
+                <span style={{ fontWeight: 600 }}>{ev.title}</span>
+                <span style={{ fontSize: 9, color: T.text3 }}>dia inteiro</span>
+              </div>
+            ))}
+            {dueIssues.map(i => {
+              const dotC = TYPE_COLOR[i.type] ?? T.text3
+              const isOverdue = new Date(i.dueDateIso) < today && i.status !== 'done'
+              return (
+                <div key={i.key} style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  background: isOverdue ? `${T.crit}12` : T.warnDim,
+                  border: `1px solid ${isOverdue ? T.crit : T.warn}44`,
+                  borderRadius: 6, padding: '4px 10px', fontSize: 11, color: isOverdue ? T.crit : T.warn,
+                }}>
+                  <span style={{ fontSize: 9 }}>⏰</span>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{i.key}</span>
+                  <span style={{ color: dotC }}>·</span>
+                  <span style={{ color: T.text2, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.title}</span>
+                  {i.blocked && <span style={{ fontSize: 9, color: T.crit }}>🔴 Bloqueado</span>}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Hour grid ── */}
+      <div style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
+        {/* Now line */}
+        {isToday && (
+          <div
+            ref={nowRef}
+            style={{
+              position: 'absolute', left: 0, right: 0,
+              top: nowTopPx, zIndex: 10, pointerEvents: 'none',
+              display: 'flex', alignItems: 'center',
+            }}
+          >
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: T.crit, flexShrink: 0, marginLeft: 48 }} />
+            <div style={{ flex: 1, height: 2, background: T.crit, opacity: 0.8 }} />
+          </div>
+        )}
+
+        {ALL_HOURS.map(hour => {
+          const hEvs   = eventsAtHour(hour)
+          const isEmpty = hEvs.length === 0
+          const isNowHour = isToday && new Date().getHours() === hour
+
+          return (
+            <div
+              key={hour}
+              onClick={() => isEmpty && onSlotClick(anchor, hour)}
+              style={{
+                display: 'flex', minHeight: HOUR_H,
+                borderBottom: `1px solid ${T.border}${hour % 2 === 0 ? '' : '55'}`,
+                background: isNowHour ? `${T.accent}05` : 'transparent',
+                cursor: isEmpty ? 'pointer' : 'default',
+              }}
+              onMouseEnter={e => { if (isEmpty) (e.currentTarget as HTMLDivElement).style.background = `${T.text3}07` }}
+              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = isNowHour ? `${T.accent}05` : 'transparent' }}
+            >
+              {/* Hour label */}
+              <div style={{
+                width: 56, flexShrink: 0, paddingTop: 6, paddingRight: 10,
+                textAlign: 'right', fontSize: 10,
+                color: isNowHour ? T.accent : T.text3,
+                fontWeight: isNowHour ? 700 : 400,
+                userSelect: 'none',
+              }}>
+                {`${String(hour).padStart(2,'0')}:00`}
+              </div>
+
+              {/* Events in this hour */}
+              <div style={{ flex: 1, padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {hEvs.map(ev => {
+                  const start = new Date(ev.start), end = new Date(ev.end)
+                  const isGoogle = ev.source === 'google'
+                  const durationH = (end.getTime() - start.getTime()) / 3_600_000
+                  return (
+                    <div
+                      key={ev.id}
+                      onClick={e => { e.stopPropagation(); onEventClick(ev) }}
+                      style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 10,
+                        background: `${ev.color}18`,
+                        borderLeft: `3px solid ${ev.color}`,
+                        borderRadius: 6, padding: '6px 10px', cursor: 'pointer',
+                        borderTop: isGoogle ? `1px dashed ${ev.color}77` : 'none',
+                        minHeight: Math.max(40, durationH * 28),
+                      }}
+                    >
+                      {/* Time col */}
+                      <div style={{ fontSize: 11, color: ev.color, fontWeight: 700, flexShrink: 0, lineHeight: 1.4 }}>
+                        <div>{fmtTime(start)}</div>
+                        <div style={{ fontWeight: 400, color: T.text3 }}>– {fmtTime(end)}</div>
+                      </div>
+                      {/* Content col */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          {isGoogle && <span style={{ fontSize: 9, fontWeight: 800, color: ev.color }}>G</span>}
+                          <span style={{ fontSize: 13, fontWeight: 700, color: T.text1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {ev.title}
+                          </span>
+                        </div>
+                        {ev.meetLink && (
+                          <div style={{ fontSize: 11, color: T.accent, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <span>📹</span>
+                            <span style={{ fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {ev.meetLink}
+                            </span>
+                          </div>
+                        )}
+                        {ev.guests.length > 0 && (
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                            {ev.guests.slice(0, 3).map(g => (
+                              <span key={g.email} style={{
+                                fontSize: 10, color: T.text2, background: `${T.text3}12`,
+                                border: `1px solid ${T.border}`, borderRadius: 3, padding: '1px 6px',
+                              }}>{g.name.split(' ')[0]}</span>
+                            ))}
+                            {ev.guests.length > 3 && <span style={{ fontSize: 10, color: T.text3 }}>+{ev.guests.length - 3}</span>}
+                          </div>
+                        )}
+                        {ev.location && (
+                          <div style={{ fontSize: 10, color: T.text3, marginTop: 3 }}>📍 {ev.location}</div>
+                        )}
+                      </div>
+                      {/* Type tag */}
+                      <div style={{
+                        fontSize: 9, fontWeight: 700, flexShrink: 0,
+                        background: `${ev.color}22`, color: ev.color,
+                        border: `1px solid ${ev.color}44`, borderRadius: 4, padding: '1px 5px',
+                      }}>
+                        {isGoogle ? 'Google' : 'Evento'}
+                      </div>
+                    </div>
+                  )
+                })}
+                {/* Empty hour hint */}
+                {isEmpty && (
+                  <div style={{ fontSize: 10, color: `${T.text3}44`, paddingTop: 2, userSelect: 'none' }}>
+                    Clique para criar evento
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main page ─────────────────────────────────────────────────────────────────
-type CalView = 'month' | 'week'
+type CalView = 'month' | 'week' | 'day'
 
 export default function CalendarPage() {
   const today       = new Date(); today.setHours(0,0,0,0)
@@ -694,17 +930,19 @@ export default function CalendarPage() {
   function refresh() { setTick(t => t + 1) }
   void tick
 
-  function navToday() { setAnchor(new Date(today)) }
+  function navToday() { setAnchor(new Date(today)); setView('day') }
   function navPrev()  {
     const d = new Date(anchor)
     if (view === 'month') d.setMonth(d.getMonth() - 1, 1)
-    else d.setDate(d.getDate() - 7)
+    else if (view === 'week') d.setDate(d.getDate() - 7)
+    else d.setDate(d.getDate() - 1)
     setAnchor(d)
   }
   function navNext()  {
     const d = new Date(anchor)
     if (view === 'month') d.setMonth(d.getMonth() + 1, 1)
-    else d.setDate(d.getDate() + 7)
+    else if (view === 'week') d.setDate(d.getDate() + 7)
+    else d.setDate(d.getDate() + 1)
     setAnchor(d)
   }
 
@@ -742,6 +980,8 @@ export default function CalendarPage() {
   // Period label
   const periodLabel = view === 'month'
     ? `${MONTHS_PT[month]} ${year}`
+    : view === 'day'
+    ? `${DOW_PT[anchor.getDay()]}, ${anchor.getDate()} de ${MONTHS_PT[anchor.getMonth()]} ${anchor.getFullYear()}`
     : (() => {
         const s = weekDays[0], e = weekDays[6]
         if (s.getMonth() === e.getMonth())
@@ -775,13 +1015,13 @@ export default function CalendarPage() {
 
         {/* View toggle */}
         <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: `1px solid ${T.border}` }}>
-          {(['month','week'] as CalView[]).map(v => (
+          {(['month','week','day'] as CalView[]).map(v => (
             <button key={v} onClick={() => setView(v)} style={{
               padding: '5px 14px', fontSize: 12, cursor: 'pointer',
               background: view===v ? T.accentDim : 'transparent',
               color:      view===v ? T.accent    : T.text2,
               border: 'none', fontWeight: view===v ? 700 : 400,
-            }}>{v==='month' ? 'Mês' : 'Semana'}</button>
+            }}>{v==='month' ? 'Mês' : v==='week' ? 'Semana' : 'Dia'}</button>
           ))}
         </div>
 
@@ -944,6 +1184,9 @@ export default function CalendarPage() {
           </div>
         </div>
       )}
+
+      {/* ── Day / Agenda view ───────────────────────────────────────────────── */}
+      {view === 'day' && <DayView anchor={anchor} events={events} today={today} onEventClick={setDetailEv} onSlotClick={openCreate} />}
 
       {/* ── Modals ──────────────────────────────────────────────────────────── */}
       {composer && (
