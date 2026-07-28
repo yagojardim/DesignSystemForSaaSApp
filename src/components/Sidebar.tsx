@@ -4,7 +4,8 @@ import { Avatar } from './ds/Avatar'
 import { Tooltip } from './ds/Tooltip'
 import { T } from './ds/tokens'
 import { useSession } from '../data/SessionContext'
-import { can, type Capability } from '../data/permissions'
+import { can, type Capability, PERMISSION_MATRIX } from '../data/permissions'
+import type { RoleContext } from '../data/session'
 
 interface SidebarProps {
   collapsed: boolean
@@ -81,23 +82,39 @@ const ALL_GROUPS: NavGroup[] = [
   },
 ]
 
+// ─── Role → nav item ids map ──────────────────────────────────────────────────
+const ROLE_NAV_MAP: Record<RoleContext, string[]> = {
+  Admin:          ['home','my-tasks','calendar','projects-list','project','list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','config','automations','client-access','client','team','login','client-login'],
+  PMO:            ['home','calendar','projects-list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','client'],
+  ProjectManager: ['home','my-tasks','calendar','projects-list','project','list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','client'],
+  ProductManager: ['home','calendar','projects-list','dashboard','epics','releases','reports','filters','navigator'],
+  ProductOwner:   ['home','my-tasks','calendar','projects-list','project','list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','client','client-access'],
+  ScrumMaster:    ['home','my-tasks','calendar','projects-list','project','list','gantt','timeline','filters','navigator','reports'],
+  TechLead:       ['home','my-tasks','calendar','projects-list','project','list','gantt','filters','navigator','reports'],
+  Dev:            ['home','my-tasks','calendar','projects-list','project','list','filters','navigator'],
+  UX:             ['home','my-tasks','calendar','projects-list','project','list','filters','navigator'],
+  QA:             ['home','my-tasks','calendar','projects-list','project','list','filters','navigator'],
+}
+
 function ClockIcon()    { return <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.2"/><path d="M6.5 4v2.5l1.5 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg> }
 function MyTasksIcon()   { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 3.5h10M2 7h10M2 10.5h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><circle cx="11" cy="10.5" r="2" stroke="currentColor" strokeWidth="1.2"/><path d="M10 10.5l.75.75L12 9.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/></svg> }
 
-function getGroups(permissions: string[]): NavGroup[] {
+function getGroups(role: RoleContext, permissions: string[]): NavGroup[] {
+  const allowed = new Set(ROLE_NAV_MAP[role] ?? [])
   return ALL_GROUPS
     .map(g => ({
       ...g,
       items: g.items.filter(item => {
-        if (item.cap && !can(permissions, item.cap)) return false
-        return true
+        // (a) explicitly in this role's nav map
+        if (allowed.has(item.id)) return true
+        // (b) capability opt-in: user has the cap AND it's an opt-in for this role
+        if (item.cap && can(permissions, item.cap)) {
+          return PERMISSION_MATRIX[item.cap]?.optIn.includes(role) ?? false
+        }
+        return false
       }),
     }))
     .filter(g => g.items.length > 0)
-    .map(g => ({
-      ...g,
-      items: g.items.filter((item, idx, arr) => arr.findIndex(x => x.id === item.id) === idx),
-    }))
 }
 
 // ─── Project sub-list data & state ───────────────────────────────────────────
@@ -581,7 +598,7 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav }: SidebarProps)
 
   const { activeUser } = useSession()
   const permissions    = activeUser.permissions
-  const groups         = getGroups(permissions)
+  const groups         = getGroups(activeUser.role_context, permissions)
   const canLogHours    = can(permissions, 'log:hours')
 
   const sidebarStyle: React.CSSProperties = {
