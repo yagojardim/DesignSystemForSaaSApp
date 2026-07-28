@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { T as DS } from '../components/ds/tokens'
 import { CreateIssueModal } from '../components/CreateIssueModal'
 import { CompleteSprintModal } from '../components/CompleteSprintModal'
-import { getActiveUser } from '../data/session'
+import { useSession } from '../data/SessionContext'
 import { can } from '../data/permissions'
 
 // ─── RULE annotations ────────────────────────────────────────────────────────
@@ -15,6 +15,8 @@ type IssueType   = 'story' | 'bug' | 'task' | 'subtask' | 'epic' | 'feature'
 type IssueStatus = 'backlog' | 'todo' | 'in-progress' | 'in-review' | 'done'
 type Priority    = 'critical' | 'high' | 'medium' | 'low'
 
+interface IssueComment { author: string; text: string; when: string }
+
 interface Issue {
   key:      string
   type:     IssueType
@@ -26,9 +28,24 @@ interface Issue {
   dueDate:  string
   points:   number
   epic?:    string
-  sprint?:  string        // sprint id
+  sprint?:  string
   blocked?: boolean
   delayed?: boolean
+  // P2 extensions
+  severity?:                   'critical' | 'high' | 'medium' | 'low'
+  description?:                string
+  reporter?:                   string
+  blocked_reason?:             string
+  parent_id?:                  string
+  feature_id?:                 string
+  acceptance_criteria_count?:  number
+  comment_count?:              number
+  attachment_count?:           number
+  evidence_count?:             number
+  reopen_count?:               number
+  is_regression?:              boolean
+  open_dependency?:            boolean
+  comments?:                   IssueComment[]
 }
 
 interface SprintDef {
@@ -61,25 +78,93 @@ const SPRINTS: SprintDef[] = [
 // ─── Issues ───────────────────────────────────────────────────────────────────
 const INIT_ISSUES: Issue[] = [
   // Sprint 14 (active)
-  { key:'PM-101', type:'story',   title:'Homepage hero — layout explorations',         status:'in-progress', priority:'high',     labels:['Design','Hero'],    assignee:'AL', dueDate:'Abr 4',  points:5, epic:'EP-01', sprint:'s14' },
-  { key:'PM-102', type:'bug',     title:'Login form validation falha no mobile',        status:'in-progress', priority:'critical', labels:['Eng'],              assignee:'JN', dueDate:'Abr 3',  points:3, epic:'EP-02', sprint:'s14', blocked:true },
-  { key:'PM-103', type:'task',    title:'Configurar Storybook para componentes',        status:'in-progress', priority:'medium',   labels:['Eng'],              assignee:'LF', dueDate:'Abr 6',  points:2, epic:'EP-02', sprint:'s14' },
-  { key:'PM-104', type:'story',   title:'Breakpoints responsivos — hero + feature grid',status:'in-progress', priority:'high',     labels:['Design','Mobile'],  assignee:'CS', dueDate:'Abr 3',  points:8, epic:'EP-01', sprint:'s14', delayed:true },
-  { key:'PM-105', type:'bug',     title:'Footer sobrepõe conteúdo no Safari',           status:'todo',        priority:'medium',   labels:['Eng','Web'],        assignee:'NM', dueDate:'Abr 10', points:2, epic:'EP-02', sprint:'s14' },
-  { key:'PM-107', type:'task',    title:'Spec de nav + componente footer',              status:'in-review',   priority:'low',      labels:['Design'],           assignee:'AL', dueDate:'Abr 3',  points:3, epic:'EP-01', sprint:'s14' },
-  { key:'PM-108', type:'story',   title:'UX study: design Northwind',                  status:'in-review',   priority:'medium',   labels:['UX','SEO'],         assignee:'JN', dueDate:'Abr 5',  points:5, epic:'EP-03', sprint:'s14' },
+  {
+    key:'PM-101', type:'story', title:'Homepage hero — layout explorations',
+    status:'in-progress', priority:'high', labels:['Design','Hero'], assignee:'AL', dueDate:'Abr 4', points:5,
+    epic:'EP-01', sprint:'s14', reporter:'JN',
+    description:'Explorar variações de layout para o bloco hero da homepage: fullbleed, split e centered. Entregar 3 opções para revisão do PO.',
+    acceptance_criteria_count:2, comment_count:3, attachment_count:2,
+  },
+  {
+    key:'PM-102', type:'bug', title:'Login form validation falha no mobile',
+    status:'in-progress', priority:'critical', labels:['Eng'], assignee:'JN', dueDate:'Abr 3', points:3,
+    epic:'EP-02', sprint:'s14', blocked:true, severity:'critical', reporter:'CS',
+    blocked_reason:'Aguardando fix no serviço de auth — ticket #892 aberto com infra.',
+    description:'Em viewports < 480px o submit do formulário de login dispara sem validar os campos obrigatórios, enviando payload vazio para a API.',
+    evidence_count:0,
+    comments:[
+      { author:'CS', text:'Reproduzido no Chrome Mobile e Safari iOS 17. Não ocorre no Android Firefox.', when:'há 2d' },
+      { author:'JN', text:'Bloqueado pelo serviço de auth. Aguardando resposta da infra.', when:'há 1d' },
+    ],
+  },
+  {
+    key:'PM-103', type:'task', title:'Configurar Storybook para componentes',
+    status:'in-progress', priority:'medium', labels:['Eng'], assignee:'LF', dueDate:'Abr 6', points:2,
+    epic:'EP-02', sprint:'s14', reporter:'LF',
+    description:'Instalar e configurar Storybook 7 com suporte a Tailwind CSS v4 e tokens de design. Criar stories para Button, Badge e Input.',
+    acceptance_criteria_count:1, comment_count:1,
+  },
+  {
+    key:'PM-104', type:'story', title:'Breakpoints responsivos — hero + feature grid',
+    status:'in-progress', priority:'high', labels:['Design','Mobile'], assignee:'CS', dueDate:'Abr 3', points:8,
+    epic:'EP-01', sprint:'s14', delayed:true, reporter:'AL',
+    open_dependency:true,
+    acceptance_criteria_count:0,
+    description:'',
+    blocked_reason:'',
+    comments:[{ author:'AL', text:'Aguardando aprovação dos breakpoints no Figma antes de implementar.', when:'há 1d' }],
+  },
+  {
+    key:'PM-105', type:'bug', title:'Footer sobrepõe conteúdo no Safari',
+    status:'todo', priority:'medium', labels:['Eng','Web'], assignee:'NM', dueDate:'Abr 10', points:2,
+    epic:'EP-02', sprint:'s14', severity:'medium', reporter:'AL',
+    description:'No Safari 17, o footer em position:fixed sobrepõe o último bloco de conteúdo quando scroll chega ao final da página.',
+    evidence_count:1, comment_count:0,
+  },
+  {
+    key:'PM-107', type:'task', title:'Spec de nav + componente footer',
+    status:'in-review', priority:'low', labels:['Design'], assignee:'AL', dueDate:'Abr 3', points:3,
+    epic:'EP-01', sprint:'s14', reporter:'JN',
+    description:'Criar especificação de componente para o footer: tipografia, espaçamento, links e comportamento responsivo. Entregar no Figma com anotações.',
+    acceptance_criteria_count:2, comment_count:1,
+  },
+  {
+    key:'PM-108', type:'story', title:'UX study: design Northwind',
+    status:'in-review', priority:'medium', labels:['UX','SEO'], assignee:'JN', dueDate:'Abr 5', points:5,
+    epic:'EP-03', sprint:'s14', reporter:'NM',
+    description:'Teardown de UX do site Northwind: navigation, CTAs, onboarding flow e tratamento de erros. Deliverable: deck de insights com printscreens anotados.',
+    acceptance_criteria_count:1, comment_count:2,
+  },
   // Sprint 15 (planned) — RULE 1: not overwritten by board actions
-  { key:'PM-106', type:'story',   title:'Copywriting da página de preços v2',          status:'backlog',     priority:'high',     labels:['Content'],          assignee:'NM', dueDate:'Abr 22', points:5, epic:'EP-03', sprint:'s15' },
-  { key:'PM-109', type:'story',   title:'Entrevistas com 5 clientes trial',            status:'backlog',     priority:'medium',   labels:['Research'],         assignee:'JN', dueDate:'Abr 16', points:5, epic:'EP-03', sprint:'s15' },
-  { key:'PM-110', type:'task',    title:'Auditoria de a11y nas páginas de marketing',  status:'backlog',     priority:'medium',   labels:['Design','Web'],     assignee:'AL', dueDate:'Abr 12', points:3, epic:'EP-01', sprint:'s15' },
+  {
+    key:'PM-106', type:'story', title:'Copywriting da página de preços v2',
+    status:'backlog', priority:'high', labels:['Content'], assignee:'NM', dueDate:'Abr 22', points:5,
+    epic:'EP-03', sprint:'s15', reporter:'RM',
+    description:'',
+    acceptance_criteria_count:0,
+  },
+  {
+    key:'PM-109', type:'story', title:'Entrevistas com 5 clientes trial',
+    status:'backlog', priority:'medium', labels:['Research'], assignee:'JN', dueDate:'Abr 16', points:5,
+    epic:'EP-03', sprint:'s15', reporter:'NM',
+    description:'Realizar entrevistas qualitativas semi-estruturadas com clientes em período trial para identificar friction points no onboarding e razões de churn.',
+    acceptance_criteria_count:2, comment_count:1,
+  },
+  {
+    key:'PM-110', type:'task', title:'Auditoria de a11y nas páginas de marketing',
+    status:'backlog', priority:'medium', labels:['Design','Web'], assignee:'AL', dueDate:'Abr 12', points:3,
+    epic:'EP-01', sprint:'s15', reporter:'CS',
+    description:'Auditar contraste, foco de teclado, labels ARIA e semântica HTML nas 6 páginas de marketing. Usar axe-core e revisão manual.',
+    acceptance_criteria_count:1,
+  },
   // Completed
-  { key:'PM-111', type:'story',   title:'Teardown competitivo — 8 sites',              status:'done',        priority:'low',      labels:['Research'],         assignee:'RM', dueDate:'Mar 28', points:3, epic:'EP-03', sprint:'s13' },
-  { key:'PM-112', type:'task',    title:'Finalizar tokens de cor + tipografia',        status:'done',        priority:'medium',   labels:['Brand'],            assignee:'NM', dueDate:'Mar 28', points:2, epic:'EP-01', sprint:'s13' },
-  { key:'PM-113', type:'task',    title:'Scaffolding do repositório + CI pipeline',    status:'done',        priority:'high',     labels:['Eng'],              assignee:'LF', dueDate:'Mar 22', points:2, epic:'EP-02', sprint:'s13' },
+  { key:'PM-111', type:'story', title:'Teardown competitivo — 8 sites',              status:'done', priority:'low',    labels:['Research'], assignee:'RM', dueDate:'Mar 28', points:3, epic:'EP-03', sprint:'s13', description:'Análise de 8 sites competidores com foco em pricing, hero e onboarding.', acceptance_criteria_count:2 },
+  { key:'PM-112', type:'task',  title:'Finalizar tokens de cor + tipografia',         status:'done', priority:'medium', labels:['Brand'],    assignee:'NM', dueDate:'Mar 28', points:2, epic:'EP-01', sprint:'s13', description:'Definir e exportar tokens de design no Figma e CSS.', acceptance_criteria_count:1 },
+  { key:'PM-113', type:'task',  title:'Scaffolding do repositório + CI pipeline',     status:'done', priority:'high',   labels:['Eng'],      assignee:'LF', dueDate:'Mar 22', points:2, epic:'EP-02', sprint:'s13', description:'Setup inicial do repo com Vite, TypeScript, Tailwind e pipeline CI/CD.', acceptance_criteria_count:1 },
   // Backlog (no sprint)
-  { key:'PM-114', type:'story',   title:'Auditoria de metadata SEO',                  status:'backlog',     priority:'low',      labels:['SEO'],              assignee:'RM', dueDate:'Mai 5',  points:3, epic:'EP-03' },
-  { key:'PM-115', type:'subtask', title:'Escrever copy do hero principal',             status:'backlog',     priority:'low',      labels:['Content'],          assignee:'NM', dueDate:'Abr 8',  points:1, epic:'EP-01' },
-  { key:'PM-116', type:'feature', title:'Sistema de busca do portal',                 status:'backlog',     priority:'medium',   labels:['Eng'],              assignee:'LF', dueDate:'Mai 20', points:8, epic:'EP-02' },
+  { key:'PM-114', type:'story',   title:'Auditoria de metadata SEO', status:'backlog', priority:'low',    labels:['SEO'],     assignee:'RM', dueDate:'Mai 5',  points:3, epic:'EP-03', description:'', acceptance_criteria_count:0 },
+  { key:'PM-115', type:'subtask', title:'Escrever copy do hero principal', status:'backlog', priority:'low', labels:['Content'], assignee:'NM', dueDate:'Abr 8', points:1, epic:'EP-01', description:'Redigir headline, subheadline e CTA do hero para 3 variações de A/B test.' },
+  { key:'PM-116', type:'feature', title:'Sistema de busca do portal', status:'backlog', priority:'medium', labels:['Eng'], assignee:'LF', dueDate:'Mai 20', points:8, epic:'EP-02', description:'Implementar busca full-text com Algolia no portal de conteúdo.', acceptance_criteria_count:3, comment_count:2 },
 ]
 
 const EPICS = [
@@ -158,6 +243,60 @@ function TypeIcon({ t }: { t: IssueType }) {
   }
   const m = map[t]
   return <span className="text-[11px] flex-shrink-0" style={{ color: m.color }}>{m.label}</span>
+}
+
+// ─── Tag system (P3) ──────────────────────────────────────────────────────────
+type TagLevel = 'red' | 'amber' | 'green'
+interface CardTag { label: string; level: TagLevel }
+
+const TAG_COLORS: Record<TagLevel, { bg: string; color: string }> = {
+  red:   { bg: DS.critDim,    color: DS.crit    },
+  amber: { bg: DS.warnDim,    color: DS.warn    },
+  green: { bg: DS.successDim, color: DS.success },
+}
+
+function isReadyForDev(issue: Issue): boolean {
+  return !!(
+    issue.description?.trim() &&
+    (issue.epic || issue.feature_id) &&
+    issue.acceptance_criteria_count && issue.acceptance_criteria_count > 0 &&
+    issue.priority &&
+    issue.points &&
+    !issue.open_dependency &&
+    !issue.blocked &&
+    (issue.status === 'todo' || issue.status === 'backlog')
+  )
+}
+
+function getCardTags(issue: Issue): CardTag[] {
+  const tags: CardTag[] = []
+  if (issue.blocked)
+    tags.push({ label: 'Bloqueado', level: 'red' })
+  if (issue.type === 'bug' && (issue.severity === 'critical' || issue.priority === 'critical'))
+    tags.push({ label: 'Bug Crítico', level: 'red' })
+  if (issue.delayed)
+    tags.push({ label: 'Atrasado', level: 'red' })
+  if (issue.type === 'bug' && issue.reopen_count && issue.reopen_count > 0)
+    tags.push({ label: 'Reaberto', level: 'red' })
+  if (issue.type === 'bug' && issue.is_regression)
+    tags.push({ label: 'Regressão', level: 'red' })
+  if (issue.type === 'subtask' && !issue.parent_id)
+    tags.push({ label: 'Sem Pai', level: 'red' })
+  if (!issue.assignee)
+    tags.push({ label: 'Sem Responsável', level: 'amber' })
+  if (issue.open_dependency)
+    tags.push({ label: 'Dependência Aberta', level: 'amber' })
+  if (issue.type === 'story' && !issue.acceptance_criteria_count)
+    tags.push({ label: 'Sem Critério Aceite', level: 'amber' })
+  if (!issue.points && issue.type !== 'bug' && issue.type !== 'subtask')
+    tags.push({ label: 'Sem Estimativa', level: 'amber' })
+  if (!issue.description?.trim())
+    tags.push({ label: 'Desc. Insuficiente', level: 'amber' })
+  if (issue.type === 'bug' && issue.evidence_count === 0)
+    tags.push({ label: 'Sem Evidência', level: 'amber' })
+  if (isReadyForDev(issue))
+    tags.push({ label: '✓ Ready', level: 'green' })
+  return tags
 }
 
 // ─── Iniciar Sprint modal ─────────────────────────────────────────────────────
@@ -327,21 +466,36 @@ function StartSprintModal({ sprint, onConfirm, onClose }: StartSprintModalProps)
 }
 
 // ─── Board card ───────────────────────────────────────────────────────────────
-function BoardCard({ issue, dragging, onDragStart, onDragEnd }: {
+function BoardCard({ issue, dragging, onDragStart, onDragEnd, onOpen, canDrag }: {
   issue: Issue
   dragging: boolean
   onDragStart: () => void
   onDragEnd: () => void
+  onOpen: () => void
+  canDrag: boolean
 }) {
   const [hovered, setHovered] = useState(false)
-  const isDelayed = issue.delayed
   const isBlocked = issue.blocked
+  const isDelayed  = issue.delayed
+  const mouseDownPos = useRef<{ x: number; y: number } | null>(null)
+
+  const tags        = getCardTags(issue)
+  const visibleTags = tags.slice(0, 3)
+  const tagOverflow = tags.length - 3
 
   return (
     <div
-      draggable
-      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; onDragStart() }}
-      onDragEnd={onDragEnd}
+      draggable={canDrag}
+      onMouseDown={e => { mouseDownPos.current = { x: e.clientX, y: e.clientY } }}
+      onClick={e => {
+        if (!mouseDownPos.current) return
+        const dx = e.clientX - mouseDownPos.current.x
+        const dy = e.clientY - mouseDownPos.current.y
+        if (Math.sqrt(dx * dx + dy * dy) < 5) onOpen()
+        mouseDownPos.current = null
+      }}
+      onDragStart={canDrag ? e => { e.dataTransfer.effectAllowed = 'move'; onDragStart() } : undefined}
+      onDragEnd={canDrag ? onDragEnd : undefined}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -353,32 +507,30 @@ function BoardCard({ issue, dragging, onDragStart, onDragEnd }: {
           : `1px solid ${hovered ? S.border2 : S.border}`,
         borderRadius: 10,
         padding: '9px 11px',
-        cursor: 'grab',
+        cursor: canDrag ? 'grab' : 'pointer',
         opacity: dragging ? 0.4 : 1,
         boxShadow: hovered ? '0 4px 12px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.15)',
         transform: hovered ? 'translateY(-1px)' : 'none',
         transition: 'all 0.12s',
       }}
     >
-      {/* Blocked / delayed banner */}
-      {isBlocked && (
-        <div className="flex items-center gap-1 text-[9px] font-bold mb-2 px-1.5 py-px rounded w-fit" style={{ background: DS.critDim, color: DS.crit }}>
-          ⛔ BLOQUEADO
-        </div>
-      )}
-      {!isBlocked && isDelayed && (
-        <div className="flex items-center gap-1 text-[9px] font-bold mb-2 px-1.5 py-px rounded w-fit" style={{ background: DS.warnDim, color: DS.warn }}>
-          ⚠ ATRASADO
-        </div>
-      )}
-
-      {/* Type + key */}
+      {/* Type + key + severity badge (bug) + priority */}
       <div className="flex items-center gap-1.5 mb-1.5">
         <TypeIcon t={issue.type} />
         <span className="text-[10px] font-mono" style={{ color: S.t3 }}>{issue.key}</span>
-        <span className="ml-auto">
-          <PriorityDot p={issue.priority} />
-        </span>
+        {issue.type === 'bug' && issue.severity && (
+          <span
+            className="text-[8px] font-bold px-1 py-px rounded leading-tight"
+            style={issue.severity === 'critical'
+              ? { background: DS.critDim, color: DS.crit }
+              : issue.severity === 'high'
+              ? { background: DS.warnDim, color: DS.warn }
+              : { background: DS.accentDim, color: DS.accent }}
+          >
+            {issue.severity === 'critical' ? 'CRIT' : issue.severity === 'high' ? 'HIGH' : issue.severity.toUpperCase()}
+          </span>
+        )}
+        <span className="ml-auto"><PriorityDot p={issue.priority} /></span>
       </div>
 
       {/* Title */}
@@ -386,34 +538,438 @@ function BoardCard({ issue, dragging, onDragStart, onDragEnd }: {
         {issue.title}
       </p>
 
-      {/* Labels */}
-      {issue.labels.length > 0 && (
+      {/* Conditional tags (P3) — max 3 + "+N" */}
+      {tags.length > 0 && (
         <div className="flex flex-wrap gap-0.5 mb-2">
-          {issue.labels.map(l => <LabelChip key={l} name={l} />)}
+          {visibleTags.map(tag => {
+            const c = TAG_COLORS[tag.level]
+            return (
+              <span key={tag.label} className="text-[9px] font-semibold px-1 py-px rounded-md leading-tight"
+                style={{ background: c.bg, color: c.color }}>
+                {tag.label}
+              </span>
+            )
+          })}
+          {tagOverflow > 0 && (
+            <span className="text-[9px] font-semibold px-1 py-px rounded-md leading-tight"
+              style={{ background: S.surface2, color: S.t3 }}>
+              +{tagOverflow}
+            </span>
+          )}
         </div>
       )}
 
-      {/* Footer: due date + points + assignee */}
+      {/* Footer: due date + points + meta counts + assignee */}
       <div className="flex items-center gap-1.5">
-        <span
-          className="text-[10px] flex items-center gap-0.5"
-          style={{ color: isDelayed ? DS.warn : isBlocked ? DS.crit : S.t3 }}
-        >
+        <span className="text-[10px] flex items-center gap-0.5"
+          style={{ color: isBlocked ? DS.crit : isDelayed ? DS.warn : S.t3 }}>
           <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
             <rect x="1" y="1.5" width="7" height="6" rx="1" stroke="currentColor" strokeWidth="1"/>
             <path d="M3 1v1.5M6 1v1.5M1 3.5h7" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
           </svg>
           {issue.dueDate}
         </span>
-        <span
-          className="text-[9px] font-bold px-1 py-px rounded ml-auto"
-          style={{ background: S.surface2, color: S.t3 }}
-        >
+        <span className="text-[9px] font-bold px-1 py-px rounded ml-auto" style={{ background: S.surface2, color: S.t3 }}>
           {issue.points}pt
         </span>
-        {issue.assignee && <Av i={issue.assignee} size={18} />}
+        {(issue.comment_count ?? 0) > 0 && (
+          <span className="text-[9px]" style={{ color: S.t3 }}>💬{issue.comment_count}</span>
+        )}
+        {(issue.attachment_count ?? 0) > 0 && (
+          <span className="text-[9px]" style={{ color: S.t3 }}>📎{issue.attachment_count}</span>
+        )}
+        {issue.assignee
+          ? <span onClick={e => e.stopPropagation()}><Av i={issue.assignee} size={18} /></span>
+          : <span className="inline-flex items-center justify-center rounded-full text-[8px] font-bold flex-shrink-0"
+              style={{ width:18, height:18, border:`1.5px dashed ${S.border2}`, color:S.t3 }}>?</span>
+        }
       </div>
     </div>
+  )
+}
+
+// ─── WorkItemDetailDrawer (P4) ────────────────────────────────────────────────
+const STATUS_LABEL: Record<string, string> = {
+  backlog:'Backlog', todo:'A fazer', 'in-progress':'Em andamento', 'in-review':'Em revisão', done:'Concluído',
+}
+const STATUS_COLOR: Record<string, string> = {
+  backlog:DS.text3, todo:DS.text2, 'in-progress':DS.accent, 'in-review':DS.warn, done:DS.success,
+}
+const PRIORITY_LABEL: Record<string, string> = {
+  critical:'🔴 Crítico', high:'🟠 Alto', medium:'🟡 Médio', low:'🟢 Baixo',
+}
+const TYPE_LABEL: Record<string, string> = {
+  story:'História', bug:'Bug', task:'Tarefa', subtask:'Sub-tarefa', epic:'Épico', feature:'Feature',
+}
+const ASSIGNEE_LIST = ['AL','NM','JN','CS','RM','LF']
+const ASSIGNEE_NAMES: Record<string, string> = {
+  AL:'Ana Lima', NM:'Natalia Moura', JN:'Julia Neves', CS:'Carlos Silva', RM:'Rafael Mendes', LF:'Lucas Ferreira',
+}
+
+function MetaField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <p style={{ margin:'0 0 3px', fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em', color:DS.text3 }}>{label}</p>
+      <div style={{ fontSize:13, color:DS.text1 }}>{children}</div>
+    </div>
+  )
+}
+
+function WorkItemDetailDrawer({ issue, onClose, onUpdate }: {
+  issue: Issue
+  onClose: () => void
+  onUpdate: (updated: Issue) => void
+}) {
+  const { activeUser } = useSession()
+  const canEdit = can(activeUser.permissions, 'board:manage')
+
+  const [local, setLocal]           = useState<Issue>(issue)
+  const [statusOpen, setStatusOpen] = useState(false)
+  const [commentText, setComment]   = useState('')
+  const [comments, setComments]     = useState<IssueComment[]>(issue.comments ?? [])
+  const [loading, setLoading]       = useState(true)
+
+  useEffect(() => {
+    const t = setTimeout(() => setLoading(false), 260)
+    return () => clearTimeout(t)
+  }, [])
+
+  const tags = getCardTags(local)
+
+  function update(patch: Partial<Issue>) {
+    const updated = { ...local, ...patch }
+    setLocal(updated)
+    onUpdate(updated)
+  }
+
+  function handleStatusChange(s: IssueStatus) {
+    update({ status: s })
+    setStatusOpen(false)
+  }
+
+  function handleAssigneeChange(a: string) {
+    update({ assignee: a })
+  }
+
+  function handleAddComment() {
+    const t = commentText.trim()
+    if (!t) return
+    const c: IssueComment = {
+      author: activeUser.name.split(' ').slice(0,2).map(p=>p[0]).join(''),
+      text: t,
+      when: 'agora',
+    }
+    const newComments = [...comments, c]
+    setComments(newComments)
+    update({ comments: newComments, comment_count: newComments.length })
+    setComment('')
+  }
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:300 }} />
+
+      {/* Panel */}
+      <div style={{
+        position:'fixed', top:0, right:0, bottom:0, width:460,
+        background:S.surface, borderLeft:`1px solid ${S.border}`,
+        boxShadow:'-10px 0 40px rgba(0,0,0,0.45)',
+        zIndex:301, display:'flex', flexDirection:'column', overflow:'hidden',
+      }}>
+
+        {/* ── Header ────────────────────────────────────────────────────── */}
+        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'13px 16px', borderBottom:`1px solid ${S.border}`, flexShrink:0 }}>
+          <TypeIcon t={local.type} />
+          <span style={{ fontFamily:'monospace', fontSize:11, color:DS.text3, background:S.surface2, border:`1px solid ${S.border}`, borderRadius:4, padding:'1px 6px' }}>
+            {local.key}
+          </span>
+          <span style={{ fontSize:11, color:DS.text3 }}>{TYPE_LABEL[local.type]}</span>
+
+          {/* Status pill / dropdown */}
+          <div style={{ position:'relative' }}>
+            <button
+              onClick={() => canEdit && setStatusOpen(o => !o)}
+              style={{
+                display:'flex', alignItems:'center', gap:4, padding:'3px 10px', borderRadius:20,
+                background:`${STATUS_COLOR[local.status]}18`, border:`1px solid ${STATUS_COLOR[local.status]}40`,
+                color:STATUS_COLOR[local.status], fontSize:11, fontWeight:600,
+                cursor: canEdit ? 'pointer' : 'default',
+              }}
+              title={canEdit ? 'Alterar status' : 'Sem permissão para editar'}
+            >
+              <span style={{ width:6, height:6, borderRadius:'50%', background:STATUS_COLOR[local.status], display:'inline-block', flexShrink:0 }} />
+              {STATUS_LABEL[local.status] ?? local.status}
+              {canEdit && <span style={{ opacity:0.6, fontSize:10 }}>▾</span>}
+            </button>
+            {statusOpen && (
+              <div onClick={e=>e.stopPropagation()} style={{
+                position:'absolute', top:'110%', left:0, zIndex:50, minWidth:160,
+                background:S.surface, border:`1px solid ${S.border2}`, borderRadius:10,
+                boxShadow:DS.shadowModal, padding:'4px 0', overflow:'hidden',
+              }}>
+                {(['backlog','todo','in-progress','in-review','done'] as IssueStatus[]).map(s => (
+                  <button key={s} onClick={()=>handleStatusChange(s)} style={{
+                    width:'100%', display:'flex', alignItems:'center', gap:8,
+                    padding:'7px 12px', background:'none', border:'none', cursor:'pointer',
+                    color: s===local.status ? STATUS_COLOR[s] : S.t2, fontSize:12,
+                    fontWeight: s===local.status ? 700 : 400, textAlign:'left',
+                  }}
+                  onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background=S.surface2}}
+                  onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background='none'}}>
+                    <span style={{ width:6, height:6, borderRadius:'50%', background:STATUS_COLOR[s], flexShrink:0, display:'inline-block' }} />
+                    {STATUS_LABEL[s]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {!canEdit && (
+            <span style={{ fontSize:10, color:DS.text3, background:S.surface2, border:`1px solid ${S.border}`, borderRadius:6, padding:'2px 8px' }}>
+              Somente leitura
+            </span>
+          )}
+
+          <button onClick={onClose} style={{ marginLeft:'auto', width:26, height:26, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:6, border:'none', background:'transparent', color:DS.text3, cursor:'pointer', fontSize:16 }}
+            onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background=S.surface2}}
+            onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background='transparent'}}>
+            ✕
+          </button>
+        </div>
+
+        {/* ── Body ──────────────────────────────────────────────────────── */}
+        <div style={{ flex:1, overflowY:'auto', padding:'18px 20px' }}>
+
+          {/* Loading skeleton */}
+          {loading && (
+            <div className="animate-pulse space-y-3">
+              <div style={{ height:22, width:'72%', borderRadius:6, background:S.surface2 }} />
+              <div style={{ height:14, width:'40%', borderRadius:6, background:S.surface2 }} />
+              <div style={{ height:100, borderRadius:10, background:S.surface2 }} />
+              <div style={{ height:14, width:'60%', borderRadius:6, background:S.surface2 }} />
+              <div style={{ height:14, width:'80%', borderRadius:6, background:S.surface2 }} />
+              <div style={{ height:60, borderRadius:8, background:S.surface2 }} />
+            </div>
+          )}
+
+          {/* Content (shown after load) */}
+          {!loading && <>
+
+          {/* Title */}
+          <h2 style={{ margin:'0 0 16px', fontSize:17, fontWeight:700, color:DS.text1, lineHeight:1.35 }}>
+            {local.title}
+          </h2>
+
+          {/* Priority + labels row */}
+          <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:6, marginBottom:16 }}>
+            <span style={{ fontSize:11, fontWeight:500, color:PRIORITY_COLOR[local.priority] }}>
+              {PRIORITY_LABEL[local.priority]}
+            </span>
+            {local.labels.map(l => <LabelChip key={l} name={l} />)}
+          </div>
+
+          {/* Meta grid */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px 24px', marginBottom:20, padding:'14px 16px', background:S.surface2, borderRadius:10, border:`1px solid ${S.border}` }}>
+            <MetaField label="Status">
+              <span style={{ color:STATUS_COLOR[local.status], fontWeight:600 }}>{STATUS_LABEL[local.status]}</span>
+            </MetaField>
+            <MetaField label="Prioridade">
+              <span>{PRIORITY_LABEL[local.priority]}</span>
+            </MetaField>
+            <MetaField label="Responsável">
+              {canEdit ? (
+                <select value={local.assignee} onChange={e=>handleAssigneeChange(e.target.value)}
+                  style={{ background:S.surface, border:`1px solid ${S.border}`, borderRadius:6, padding:'2px 6px', color:DS.text1, fontSize:13, outline:'none', colorScheme:'dark' }}>
+                  {ASSIGNEE_LIST.map(a=>(
+                    <option key={a} value={a} style={{ background:S.surface }}>{ASSIGNEE_NAMES[a] ?? a}</option>
+                  ))}
+                </select>
+              ) : (
+                <span style={{ display:'flex', alignItems:'center', gap:6 }}>
+                  <Av i={local.assignee} size={18} />
+                  <span>{(ASSIGNEE_NAMES[local.assignee] ?? local.assignee) || '—'}</span>
+                </span>
+              )}
+            </MetaField>
+            {local.reporter && (
+              <MetaField label="Reporter">
+                <span style={{ display:'flex', alignItems:'center', gap:6 }}>
+                  <Av i={local.reporter} size={18} />
+                  <span>{ASSIGNEE_NAMES[local.reporter] ?? local.reporter}</span>
+                </span>
+              </MetaField>
+            )}
+            <MetaField label="Prazo"><span style={{ color:local.delayed?DS.warn:DS.text1 }}>{local.dueDate || '—'}</span></MetaField>
+            <MetaField label="Story Points"><span>{local.points ? `${local.points} pt` : '—'}</span></MetaField>
+            {local.sprint && <MetaField label="Sprint"><span>{SPRINTS.find(s=>s.id===local.sprint)?.name ?? local.sprint}</span></MetaField>}
+            {local.epic && <MetaField label="Épico">
+              <span style={{ color:EPICS.find(e=>e.id===local.epic)?.color ?? DS.accent }}>
+                {EPICS.find(e=>e.id===local.epic)?.label ?? local.epic}
+              </span>
+            </MetaField>}
+            {local.type === 'bug' && local.severity && (
+              <MetaField label="Severidade">
+                <span style={{ fontWeight:600, color:local.severity==='critical'?DS.crit:local.severity==='high'?DS.warn:DS.accent }}>
+                  {local.severity.charAt(0).toUpperCase()+local.severity.slice(1)}
+                </span>
+              </MetaField>
+            )}
+            {local.type === 'subtask' && (
+              <MetaField label="Task pai">
+                <span style={{ color:local.parent_id?DS.text1:DS.crit }}>
+                  {local.parent_id ?? '⛔ Não associada'}
+                </span>
+              </MetaField>
+            )}
+          </div>
+
+          {/* Blocked reason */}
+          {local.blocked && (
+            <div style={{ marginBottom:16, padding:'10px 14px', background:DS.critDim, border:`1px solid ${DS.crit}30`, borderRadius:8, display:'flex', gap:8 }}>
+              <span style={{ color:DS.crit, flexShrink:0 }}>⛔</span>
+              <div>
+                <p style={{ margin:'0 0 2px', fontSize:11, fontWeight:700, color:DS.crit }}>Bloqueado</p>
+                <p style={{ margin:0, fontSize:12, color:DS.text2 }}>{local.blocked_reason || 'Motivo não especificado.'}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Quality tags (P3) */}
+          {tags.length > 0 && (
+            <div style={{ marginBottom:16 }}>
+              <p style={{ margin:'0 0 6px', fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em', color:DS.text3 }}>Indicadores de qualidade</p>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
+                {tags.map(tag => {
+                  const c = TAG_COLORS[tag.level]
+                  return (
+                    <span key={tag.label} style={{ fontSize:11, padding:'3px 10px', borderRadius:20, background:c.bg, color:c.color, fontWeight:600, border:`1px solid ${c.color}30` }}>
+                      {tag.label}
+                    </span>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Description */}
+          <div style={{ marginBottom:20 }}>
+            <p style={{ margin:'0 0 6px', fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em', color:DS.text3 }}>Descrição</p>
+            {local.description?.trim() ? (
+              <div style={{ fontSize:13, color:DS.text1, lineHeight:1.6, whiteSpace:'pre-wrap' }}>
+                {local.description}
+              </div>
+            ) : (
+              <div style={{ fontSize:12, color:DS.text3, fontStyle:'italic', padding:'10px 12px', background:S.surface2, borderRadius:8, border:`1px dashed ${S.border2}` }}>
+                Sem descrição. {canEdit ? 'Clique para adicionar...' : ''}
+              </div>
+            )}
+          </div>
+
+          {/* Counters row */}
+          {((local.acceptance_criteria_count ?? 0) > 0 || (local.evidence_count ?? 0) > 0 || (local.attachment_count ?? 0) > 0) && (
+            <div style={{ display:'flex', gap:12, marginBottom:20 }}>
+              {(local.acceptance_criteria_count ?? 0) > 0 && (
+                <span style={{ fontSize:11, color:DS.success }}>✓ {local.acceptance_criteria_count} critério{local.acceptance_criteria_count!==1?'s':''} de aceite</span>
+              )}
+              {(local.evidence_count ?? 0) > 0 && (
+                <span style={{ fontSize:11, color:DS.text2 }}>🔬 {local.evidence_count} evidência{local.evidence_count!==1?'s':''}</span>
+              )}
+              {(local.attachment_count ?? 0) > 0 && (
+                <span style={{ fontSize:11, color:DS.text2 }}>📎 {local.attachment_count} anexo{local.attachment_count!==1?'s':''}</span>
+              )}
+            </div>
+          )}
+
+          {/* Comments */}
+          <div>
+            <p style={{ margin:'0 0 10px', fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em', color:DS.text3 }}>
+              Comentários {comments.length > 0 && <span style={{ color:DS.accent }}>({comments.length})</span>}
+            </p>
+
+            {comments.length === 0 && (
+              <p style={{ fontSize:12, color:DS.text3, fontStyle:'italic', marginBottom:10 }}>Nenhum comentário ainda.</p>
+            )}
+
+            <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:12 }}>
+              {comments.map((c, i) => (
+                <div key={i} style={{ display:'flex', gap:8, padding:'8px 10px', background:S.surface2, borderRadius:8, border:`1px solid ${S.border}` }}>
+                  <Av i={c.author} size={22} />
+                  <div style={{ flex:1 }}>
+                    <div style={{ display:'flex', alignItems:'baseline', gap:6, marginBottom:3 }}>
+                      <span style={{ fontSize:11, fontWeight:600, color:DS.text1 }}>{ASSIGNEE_NAMES[c.author] ?? c.author}</span>
+                      <span style={{ fontSize:10, color:DS.text3 }}>{c.when}</span>
+                    </div>
+                    <p style={{ margin:0, fontSize:12, color:DS.text2, lineHeight:1.5 }}>{c.text}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Comment input */}
+            <div style={{ display:'flex', gap:8, alignItems:'flex-end' }}>
+              <Av i={activeUser.name.split(' ').slice(0,2).map(p=>p[0]).join('')} size={22} />
+              <div style={{ flex:1 }}>
+                <textarea
+                  value={commentText}
+                  onChange={e=>setComment(e.target.value)}
+                  placeholder="Escreva um comentário..."
+                  rows={2}
+                  onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); handleAddComment() } }}
+                  style={{
+                    width:'100%', background:S.surface2, border:`1px solid ${S.border}`, borderRadius:8,
+                    padding:'8px 10px', color:DS.text1, fontSize:12, outline:'none', resize:'none',
+                    fontFamily:'inherit', lineHeight:1.4, boxSizing:'border-box',
+                  }}
+                  onFocus={e=>{e.currentTarget.style.borderColor=DS.accent}}
+                  onBlur={e=>{e.currentTarget.style.borderColor=S.border}}
+                />
+                <div style={{ display:'flex', justifyContent:'flex-end', marginTop:4 }}>
+                  <button onClick={handleAddComment} disabled={!commentText.trim()}
+                    style={{
+                      fontSize:11, fontWeight:600, padding:'4px 12px', borderRadius:6, border:'none',
+                      background:commentText.trim()?DS.accent:S.border2, color:'#fff',
+                      cursor:commentText.trim()?'pointer':'not-allowed',
+                    }}>
+                    Enviar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          </>}{/* end !loading */}
+        </div>
+
+        {/* ── Footer ────────────────────────────────────────────────────── */}
+        <div style={{ flexShrink:0, padding:'10px 16px', borderTop:`1px solid ${S.border}`, display:'flex', alignItems:'center', gap:8 }}>
+          {canEdit && (
+            <>
+              <button style={{ fontSize:12, fontWeight:600, padding:'6px 14px', borderRadius:8, border:`1px solid ${S.border}`, background:'transparent', color:DS.text2, cursor:'pointer' }}
+                onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background=S.surface2}}
+                onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background='transparent'}}>
+                Editar campos
+              </button>
+              {!local.blocked ? (
+                <button onClick={()=>update({ blocked:true, blocked_reason:'' })}
+                  style={{ fontSize:12, fontWeight:600, padding:'6px 14px', borderRadius:8, border:`1px solid ${DS.crit}40`, background:DS.critDim, color:DS.crit, cursor:'pointer' }}>
+                  Marcar bloqueado
+                </button>
+              ) : (
+                <button onClick={()=>update({ blocked:false, blocked_reason:'' })}
+                  style={{ fontSize:12, fontWeight:600, padding:'6px 14px', borderRadius:8, border:`1px solid ${DS.success}40`, background:DS.successDim, color:DS.success, cursor:'pointer' }}>
+                  Resolver bloqueio
+                </button>
+              )}
+            </>
+          )}
+          <button onClick={onClose} style={{ marginLeft:'auto', fontSize:13, fontWeight:600, padding:'7px 20px', borderRadius:8, background:DS.accent, color:'#fff', border:'none', cursor:'pointer' }}
+            onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.filter='brightness(1.12)'}}
+            onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.filter='none'}}>
+            Fechar
+          </button>
+        </div>
+      </div>
+    </>
   )
 }
 
@@ -453,6 +1009,9 @@ function BoardTab({ issues, setIssues, onCreateIssue }: {
   setIssues: (fn: (prev: Issue[]) => Issue[]) => void
   onCreateIssue: () => void
 }) {
+  const { activeUser: boardUser } = useSession()
+  const canDrag = can(boardUser.permissions, 'board:manage')
+
   // ── column config state ──────────────────────────────────────────────────
   const [cols, setCols]             = useState<ColState[]>(INITIAL_COLS)
   const [colOrder, setColOrder]     = useState<string[]>(INITIAL_COLS.map(c=>c.id))
@@ -475,6 +1034,8 @@ function BoardTab({ issues, setIssues, onCreateIssue }: {
   // WIP editor
   const [wipColId, setWipColId]         = useState<string|null>(null)
   const [wipValue,  setWipValue]        = useState('')
+  // issue detail drawer
+  const [openIssue, setOpenIssue]   = useState<Issue | null>(null)
   // filters
   const [activeSprint, setActiveSprint] = useState('s14')
   const [swimlane, setSwimlane]     = useState<SwimlaneMode>('none')
@@ -805,7 +1366,9 @@ function BoardTab({ issues, setIssues, onCreateIssue }: {
                       <BoardCard key={issue.key} issue={issue}
                         dragging={draggingCard===issue.key}
                         onDragStart={()=>setDraggingCard(issue.key)}
-                        onDragEnd={()=>{ setDraggingCard(null); setDragOver(null) }}/>
+                        onDragEnd={()=>{ setDraggingCard(null); setDragOver(null) }}
+                        onOpen={()=>setOpenIssue(issue)}
+                        canDrag={canDrag}/>
                     ))
                   ) : (
                     swimlaneKeys.map(lane=>{
@@ -818,7 +1381,9 @@ function BoardTab({ issues, setIssues, onCreateIssue }: {
                             <div key={issue.key} className="mb-1.5">
                               <BoardCard issue={issue} dragging={draggingCard===issue.key}
                                 onDragStart={()=>setDraggingCard(issue.key)}
-                                onDragEnd={()=>{ setDraggingCard(null); setDragOver(null) }}/>
+                                onDragEnd={()=>{ setDraggingCard(null); setDragOver(null) }}
+                                onOpen={()=>setOpenIssue(issue)}
+                                canDrag={canDrag}/>
                             </div>
                           ))}
                         </div>
@@ -883,6 +1448,18 @@ function BoardTab({ issues, setIssues, onCreateIssue }: {
         )
       })()}
 
+      {/* ── WorkItemDetailDrawer (P4) ───────────────────────────────────── */}
+      {openIssue && (
+        <WorkItemDetailDrawer
+          issue={openIssue}
+          onClose={() => setOpenIssue(null)}
+          onUpdate={updated => {
+            setIssues(prev => prev.map(i => i.key === updated.key ? updated : i))
+            setOpenIssue(updated)
+          }}
+        />
+      )}
+
       {/* ── WIP limit editor ────────────────────────────────────────────── */}
       {wipColId && (() => {
         const col = cols.find(c=>c.id===wipColId)
@@ -906,17 +1483,19 @@ function BoardTab({ issues, setIssues, onCreateIssue }: {
   )
 }
 
-function BacklogRow({ issue, epicColor }: { issue: Issue; epicColor: string }) {
+function BacklogRow({ issue, epicColor, onOpen }: { issue: Issue; epicColor: string; onOpen: () => void }) {
   const [hovered, setHovered] = useState(false)
+  const tags = getCardTags(issue)
   return (
     <div
-      className="flex items-center gap-2 px-4 py-2 transition-colors group"
+      className="flex items-center gap-2 px-4 py-2 transition-colors group cursor-pointer"
       style={{ background: hovered ? S.surface2 : 'transparent' }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onClick={onOpen}
     >
       {/* Drag handle */}
-      <span className="text-[10px] cursor-grab" style={{ color: S.t3, opacity: hovered ? 1 : 0.3 }}>⠿</span>
+      <span className="text-[10px] cursor-grab" style={{ color: S.t3, opacity: hovered ? 1 : 0.3 }} onClick={e => e.stopPropagation()}>⠿</span>
       {/* Type icon */}
       <TypeIcon t={issue.type} />
       {/* Key */}
@@ -925,19 +1504,28 @@ function BacklogRow({ issue, epicColor }: { issue: Issue; epicColor: string }) {
       <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: epicColor }} />
       {/* Title */}
       <span className="flex-1 text-[12px] truncate" style={{ color: S.t1 }}>{issue.title}</span>
-      {/* Labels */}
+      {/* Critical tags (red only, max 2) */}
       <div className="hidden group-hover:flex gap-0.5 flex-shrink-0">
-        {issue.labels.slice(0,2).map(l => <LabelChip key={l} name={l} />)}
+        {tags.filter(t => t.level === 'red').slice(0,2).map(tag => (
+          <span key={tag.label} className="text-[9px] font-semibold px-1 py-px rounded-md"
+            style={{ background: TAG_COLORS.red.bg, color: TAG_COLORS.red.color }}>{tag.label}</span>
+        ))}
+        {tags.filter(t => t.level === 'amber').slice(0,1).map(tag => (
+          <span key={tag.label} className="text-[9px] font-semibold px-1 py-px rounded-md"
+            style={{ background: TAG_COLORS.amber.bg, color: TAG_COLORS.amber.color }}>{tag.label}</span>
+        ))}
       </div>
       {/* Priority */}
       <span className="flex-shrink-0"><PriorityDot p={issue.priority} /></span>
       {/* Assignee */}
-      {issue.assignee ? <Av i={issue.assignee} size={18} /> : <span className="w-[18px]" />}
+      {issue.assignee
+        ? <span onClick={e => e.stopPropagation()}><Av i={issue.assignee} size={18} /></span>
+        : <span className="w-[18px] h-[18px] rounded-full inline-flex items-center justify-center text-[8px] flex-shrink-0"
+            style={{ border:`1.5px dashed ${S.border2}`, color:S.t3 }}>?</span>
+      }
       {/* Points */}
-      <span
-        className="text-[10px] font-bold px-1.5 py-px rounded w-7 text-center flex-shrink-0"
-        style={{ background: S.surface2, color: S.t3 }}
-      >
+      <span className="text-[10px] font-bold px-1.5 py-px rounded w-7 text-center flex-shrink-0"
+        style={{ background: S.surface2, color: S.t3 }}>
         {issue.points}
       </span>
     </div>
@@ -945,16 +1533,18 @@ function BacklogRow({ issue, epicColor }: { issue: Issue; epicColor: string }) {
 }
 
 // ─── Backlog tab ──────────────────────────────────────────────────────────────
-function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onCompleteSprint }: {
+function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onCompleteSprint, onUpdateIssue }: {
   issues: Issue[]
   sprints: SprintDef[]
   canManageSprint: boolean
   onCreateIssue: () => void
   onCompleteSprint: (sprint: SprintDef) => void
+  onUpdateIssue: (updated: Issue) => void
 }) {
-  const [collapsed, setCollapsed]     = useState<Set<string>>(new Set())
-  const [startingSprint, setStarting] = useState<SprintDef | null>(null)
+  const [collapsed, setCollapsed]       = useState<Set<string>>(new Set())
+  const [startingSprint, setStarting]   = useState<SprintDef | null>(null)
   const [sprintStates, setSprintStates] = useState<Record<string,string>>({})
+  const [openIssue, setOpenIssue]       = useState<Issue | null>(null)
 
   function toggleCollapse(id: string) {
     setCollapsed(prev => {
@@ -1122,7 +1712,7 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
                   ) : (
                     <div className="divide-y" style={{ borderColor: S.border }}>
                       {sprintIssues.map(issue => (
-                        <BacklogRow key={issue.key} issue={issue} epicColor={getEpicColor(issue.epic)} />
+                        <BacklogRow key={issue.key} issue={issue} epicColor={getEpicColor(issue.epic)} onOpen={()=>setOpenIssue(issue)} />
                       ))}
                     </div>
                   )}
@@ -1177,7 +1767,7 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
               ) : (
                 <div className="divide-y" style={{ borderColor: S.border }}>
                   {backlogIssues.map(issue => (
-                    <BacklogRow key={issue.key} issue={issue} epicColor={getEpicColor(issue.epic)} />
+                    <BacklogRow key={issue.key} issue={issue} epicColor={getEpicColor(issue.epic)} onOpen={()=>setOpenIssue(issue)} />
                   ))}
                 </div>
               )}
@@ -1196,53 +1786,79 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
           )}
         </div>
       </div>
+
+      {/* Drawer de detalhe (consistência cross-tela — P4) */}
+      {openIssue && (
+        <WorkItemDetailDrawer
+          issue={openIssue}
+          onClose={() => setOpenIssue(null)}
+          onUpdate={updated => {
+            onUpdateIssue(updated)
+            setOpenIssue(updated)
+          }}
+        />
+      )}
     </div>
   )
 }
 
 // ─── Sprints tab ──────────────────────────────────────────────────────────────
-function SprintsTab({ issues, sprints }: { issues: Issue[]; sprints: SprintDef[] }) {
+function SprintsTab({ issues, sprints, onUpdateIssue }: {
+  issues: Issue[]
+  sprints: SprintDef[]
+  onUpdateIssue: (updated: Issue) => void
+}) {
+  const [openIssue, setOpenIssue]   = useState<Issue | null>(null)
+  const [expanded, setExpanded]     = useState<Set<string>>(new Set(['s14']))
+  const getEpicColor = (epicId?: string) => EPICS.find(e => e.id === epicId)?.color ?? DS.text3
+
+  function toggleExpand(id: string) {
+    setExpanded(prev => {
+      const n = new Set(prev)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
+  }
+
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-4xl mx-auto px-4 py-4 space-y-3">
         {sprints.map(sprint => {
-          const si        = issues.filter(i => i.sprint === sprint.id)
-          const total     = si.reduce((s, i) => s + i.points, 0)
-          const done      = si.filter(i => i.status === 'done')
-          const donePts   = done.reduce((s, i) => s + i.points, 0)
-          const blocked   = si.filter(i => i.blocked)
-          const inProg    = si.filter(i => i.status === 'in-progress' || i.status === 'in-review')
-          const pct       = total ? Math.round((donePts / total) * 100) : 0
-          const velocity  = sprint.velocity ?? 0
+          const si      = issues.filter(i => i.sprint === sprint.id)
+          const total   = si.reduce((s, i) => s + i.points, 0)
+          const done    = si.filter(i => i.status === 'done')
+          const donePts = done.reduce((s, i) => s + i.points, 0)
+          const blocked = si.filter(i => i.blocked)
+          const inProg  = si.filter(i => i.status === 'in-progress' || i.status === 'in-review')
+          const pct     = total ? Math.round((donePts / total) * 100) : 0
+          const vel     = sprint.velocity ?? 0
+          const isOpen  = expanded.has(sprint.id)
 
-          const stateColor: Record<SprintDef['state'], string> = {
-            active: DS.success, planned: DS.accent, completed: DS.text3,
-          }
-          const sc = stateColor[sprint.state]
+          const sc = ({ active: DS.success, planned: DS.accent, completed: DS.text3 } as const)[sprint.state]
 
           return (
-            <div
-              key={sprint.id}
-              className="rounded-xl overflow-hidden"
-              style={{ background: S.surface, border: `1px solid ${S.border}` }}
-            >
-              <div className="px-5 py-4">
-                {/* Sprint title row */}
+            <div key={sprint.id} className="rounded-xl overflow-hidden"
+              style={{ background: S.surface, border: `1px solid ${S.border}` }}>
+
+              {/* ── Summary header ─────────────────────────────────────── */}
+              <div className="px-5 py-4 cursor-pointer select-none" onClick={() => toggleExpand(sprint.id)}>
                 <div className="flex items-center gap-3 mb-3">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"
+                    style={{ color:S.t3, transform:isOpen?'rotate(90deg)':'none', transition:'transform 0.15s', flexShrink:0 }}>
+                    <path d="M4.5 3L7.5 6L4.5 9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-0.5">
                       <p className="text-[14px] font-bold" style={{ color: S.t1 }}>{sprint.name}</p>
-                      <span className="text-[9px] font-bold px-1.5 py-px rounded-full" style={{ background: `${sc}22`, color: sc }}>
+                      <span className="text-[9px] font-bold px-1.5 py-px rounded-full" style={{ background:`${sc}22`, color:sc }}>
                         {sprint.state === 'active' ? '▶ Em andamento' : sprint.state === 'planned' ? 'Planejado' : '✓ Concluído'}
                       </span>
                     </div>
                     <p className="text-[11px]" style={{ color: S.t3 }}>{sprint.start} → {sprint.end}</p>
                   </div>
-
-                  {/* Stats */}
                   <div className="flex items-center gap-4">
                     <div className="text-center">
-                      <p className="text-[18px] font-bold tabular" style={{ color: sc }}>{sprint.state === 'completed' ? velocity : donePts}</p>
+                      <p className="text-[18px] font-bold tabular" style={{ color: sc }}>{sprint.state === 'completed' ? vel : donePts}</p>
                       <p className="text-[9px]" style={{ color: S.t3 }}>pts concluídos</p>
                     </div>
                     <div className="text-center">
@@ -1258,51 +1874,104 @@ function SprintsTab({ issues, sprints }: { issues: Issue[]; sprints: SprintDef[]
                   </div>
                 </div>
 
-                {/* Progress bar */}
                 {sprint.state !== 'planned' && (
                   <div className="mb-3">
                     <div className="flex justify-between text-[10px] mb-1" style={{ color: S.t3 }}>
                       <span>{pct}% concluído</span>
                       <span>{donePts}/{total}pts</span>
                     </div>
-                    <div className="h-2 rounded-full overflow-hidden" style={{ background: `${sc}20` }}>
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{ width: `${pct}%`, background: sc }}
-                      />
+                    <div className="h-1.5 rounded-full overflow-hidden" style={{ background:`${sc}20` }}>
+                      <div className="h-full rounded-full transition-all" style={{ width:`${pct}%`, background:sc }} />
                     </div>
                   </div>
                 )}
 
-                {/* Status breakdown */}
                 <div className="flex items-center gap-3">
                   {[
-                    { label: 'Concluído',    count: done.length,    color: DS.success },
-                    { label: 'Em andamento', count: inProg.length,   color: DS.accent  },
-                    { label: 'A fazer',      count: si.filter(i=>i.status==='todo'||i.status==='backlog').length, color: S.t3 },
-                    { label: 'Bloqueado',    count: blocked.length,  color: DS.crit    },
-                  ].filter(s => s.count > 0).map(s => (
+                    { label:'Concluído',    count:done.length,   color:DS.success },
+                    { label:'Em andamento', count:inProg.length, color:DS.accent  },
+                    { label:'A fazer', count:si.filter(i=>i.status==='todo'||i.status==='backlog').length, color:S.t3 },
+                    { label:'Bloqueado',    count:blocked.length,color:DS.crit    },
+                  ].filter(s=>s.count>0).map(s=>(
                     <div key={s.label} className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color }} />
-                      <span className="text-[11px]" style={{ color: S.t2 }}>
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background:s.color }}/>
+                      <span className="text-[11px]" style={{ color:S.t2 }}>
                         <span className="font-semibold">{s.count}</span> {s.label}
                       </span>
                     </div>
                   ))}
-
-                  {/* Sprint goal */}
                   {sprint.goal && (
                     <div className="ml-auto flex items-center gap-1.5">
-                      <span className="text-[9px] font-bold" style={{ color: DS.accent }}>META</span>
-                      <span className="text-[11px] italic max-w-xs truncate" style={{ color: S.t2 }}>{sprint.goal}</span>
+                      <span className="text-[9px] font-bold" style={{ color:DS.accent }}>META</span>
+                      <span className="text-[11px] italic max-w-xs truncate" style={{ color:S.t2 }}>{sprint.goal}</span>
                     </div>
                   )}
                 </div>
               </div>
+
+              {/* ── Issue list ─────────────────────────────────────────── */}
+              {isOpen && (
+                <div style={{ borderTop:`1px solid ${S.border}` }}>
+                  {/* Column header */}
+                  <div className="flex items-center gap-2 px-4 py-1.5 text-[9px] font-semibold uppercase tracking-widest"
+                    style={{ color:S.t3, borderBottom:`1px solid ${S.border}`, background:`${S.surface2}80` }}>
+                    <span className="w-4" /><span className="w-4" /><span className="w-14">Chave</span>
+                    <span className="w-1.5" /><span className="flex-1">Título</span>
+                    <span className="w-16 text-right">Status</span>
+                    <span className="w-10 text-right">Prior.</span>
+                    <span className="w-[18px]" />
+                    <span className="w-7 text-right">Pts</span>
+                  </div>
+                  {si.length === 0 ? (
+                    <div className="px-4 py-5 text-center text-[12px]" style={{ color:S.t3 }}>Nenhuma issue neste sprint</div>
+                  ) : (
+                    <div className="divide-y" style={{ borderColor:S.border }}>
+                      {si.map(issue => (
+                        <div key={issue.key} className="flex items-center gap-2 px-4 py-2 transition-colors group cursor-pointer"
+                          style={{ background:'transparent' }}
+                          onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background=S.surface2}}
+                          onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.background='transparent'}}
+                          onClick={()=>setOpenIssue(issue)}>
+                          <span className="text-[10px] cursor-grab" style={{ color:S.t3, opacity:0.3 }} onClick={e=>e.stopPropagation()}>⠿</span>
+                          <TypeIcon t={issue.type} />
+                          <span className="text-[10px] font-mono w-14 flex-shrink-0" style={{ color:S.t3 }}>{issue.key}</span>
+                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background:getEpicColor(issue.epic) }}/>
+                          <span className="flex-1 text-[12px] truncate" style={{ color:S.t1 }}>{issue.title}</span>
+                          {/* Status badge */}
+                          <span className="w-16 text-right flex-shrink-0">
+                            <span className="text-[9px] font-semibold px-1.5 py-px rounded-full"
+                              style={{ background:`${STATUS_COLOR[issue.status]}18`, color:STATUS_COLOR[issue.status] }}>
+                              {STATUS_LABEL[issue.status]}
+                            </span>
+                          </span>
+                          <span className="flex-shrink-0 w-10 text-right"><PriorityDot p={issue.priority} /></span>
+                          {issue.assignee
+                            ? <span onClick={e=>e.stopPropagation()}><Av i={issue.assignee} size={18} /></span>
+                            : <span className="w-[18px]"/>}
+                          <span className="text-[10px] font-bold px-1.5 py-px rounded w-7 text-center flex-shrink-0"
+                            style={{ background:S.surface2, color:S.t3 }}>{issue.points}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )
         })}
       </div>
+
+      {/* Drawer — consistência cross-tela (P4) */}
+      {openIssue && (
+        <WorkItemDetailDrawer
+          issue={openIssue}
+          onClose={() => setOpenIssue(null)}
+          onUpdate={updated => {
+            onUpdateIssue(updated)
+            setOpenIssue(updated)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -1318,7 +1987,7 @@ export default function ProjectPage() {
   const [completingSprint, setCompletingSprint] = useState<SprintDef|null>(null)
   const [toast, setToast] = useState<string|null>(null)
 
-  const activeUser        = getActiveUser()
+  const { activeUser }    = useSession()
   const canManageSprint   = can(activeUser.permissions, 'sprint:manage')
 
   const activeSprint      = sprints.find(s => s.state === 'active')
@@ -1443,10 +2112,10 @@ export default function ProjectPage() {
         <BoardTab issues={issues} setIssues={fn => setIssues(fn)} onCreateIssue={()=>setQuickCreate({})} />
       )}
       {tab === 'Backlog' && (
-        <BacklogTab issues={issues} sprints={sprints} canManageSprint={canManageSprint} onCreateIssue={()=>setQuickCreate({})} onCompleteSprint={s=>setCompletingSprint(s)} />
+        <BacklogTab issues={issues} sprints={sprints} canManageSprint={canManageSprint} onCreateIssue={()=>setQuickCreate({})} onCompleteSprint={s=>setCompletingSprint(s)} onUpdateIssue={updated=>setIssues(prev=>prev.map(i=>i.key===updated.key?updated:i))} />
       )}
       {tab === 'Sprints' && (
-        <SprintsTab issues={issues} sprints={sprints} />
+        <SprintsTab issues={issues} sprints={sprints} onUpdateIssue={updated=>setIssues(prev=>prev.map(i=>i.key===updated.key?updated:i))} />
       )}
 
     </div>

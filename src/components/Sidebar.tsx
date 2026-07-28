@@ -5,7 +5,7 @@ import { Tooltip } from './ds/Tooltip'
 import { T } from './ds/tokens'
 import { useSession } from '../data/SessionContext'
 import { can, type Capability, PERMISSION_MATRIX } from '../data/permissions'
-import type { RoleContext } from '../data/session'
+import { MOCK_USERS, type RoleContext } from '../data/session'
 
 interface SidebarProps {
   collapsed: boolean
@@ -547,18 +547,36 @@ const ROLE_CONTEXT_LABEL: Record<string, string> = {
 }
 
 function UserBlock({ collapsed }: { collapsed: boolean }) {
-  const { activeUser } = useSession()
+  const { activeUser, setActiveUser } = useSession()
   const name    = activeUser.name
   const email   = activeUser.email
   const rc      = activeUser.role_context
   const rs      = ROLE_CONTEXT_COLOR[rc] ?? { color: T.accent, bg: T.accentDim }
   const rcLabel = ROLE_CONTEXT_LABEL[rc] ?? rc
 
+  const [menuOpen,   setMenuOpen]   = useState(false)
+  const [switchOpen, setSwitchOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Close on outside click
+  useEffect(() => {
+    function close(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+        setSwitchOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [])
+
   const btn = (
     <button
+      onClick={() => { setMenuOpen(o => !o); setSwitchOpen(false) }}
       className={`flex items-center gap-2.5 rounded-xl transition-colors ${collapsed ? 'w-10 h-10 justify-center' : 'w-full px-3 py-2.5'}`}
+      style={{ background: menuOpen ? `${T.text3}14` : 'transparent' }}
       onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${T.text3}14` }}
-      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+      onMouseLeave={e => { if (!menuOpen) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
     >
       <Avatar name={name} size="sm" presence="online" />
       {!collapsed && (
@@ -572,18 +590,116 @@ function UserBlock({ collapsed }: { collapsed: boolean }) {
             </div>
             <p className="text-[10px] truncate mt-0.5" style={{ color: T.text3 }}>{email}</p>
           </div>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ color: T.text3, flexShrink: 0 }}>
-            <circle cx="6" cy="3" r="0.8" fill="currentColor" />
-            <circle cx="6" cy="6" r="0.8" fill="currentColor" />
-            <circle cx="6" cy="9" r="0.8" fill="currentColor" />
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ color: T.text3, flexShrink: 0, transform: menuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+            <path d="M2.5 5L6 8.5L9.5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </>
       )}
     </button>
   )
-  return collapsed ? (
-    <Tooltip label={`${name} — ${rcLabel}`} side="right">{btn}</Tooltip>
-  ) : btn
+
+  const menuDropdown = menuOpen && !collapsed && (
+    <div
+      className="absolute left-0 right-0 fade-rise"
+      style={{
+        bottom: '100%', marginBottom: 4,
+        background: T.bgSurface, border: `1px solid ${T.border2}`,
+        borderRadius: 12, boxShadow: T.shadowModal, overflow: 'hidden', zIndex: 200,
+      }}
+    >
+      {/* User info header */}
+      <div className="px-3 py-2.5" style={{ borderBottom: `1px solid ${T.border}` }}>
+        <p className="text-[13px] font-semibold truncate" style={{ color: T.text1 }}>{name}</p>
+        <p className="text-[11px] truncate mt-0.5" style={{ color: T.text3 }}>{email}</p>
+        <span className="inline-block mt-1.5 text-[9px] font-bold px-1.5 py-px rounded-full" style={{ color: rs.color, background: rs.bg }}>{rcLabel}</span>
+      </div>
+
+      {/* Menu items */}
+      {[
+        { icon: '👤', label: 'Meu perfil',    action: () => setMenuOpen(false) },
+        { icon: '⚙️', label: 'Preferências',  action: () => setMenuOpen(false) },
+      ].map(item => (
+        <button key={item.label} onClick={item.action}
+          className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] text-left transition-colors"
+          style={{ color: T.text2 }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+        >
+          <span>{item.icon}</span>{item.label}
+        </button>
+      ))}
+
+      {/* User switcher */}
+      <button
+        onClick={() => setSwitchOpen(o => !o)}
+        className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] text-left transition-colors"
+        style={{ color: T.text2, borderTop: `1px solid ${T.border}` }}
+        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
+        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+      >
+        <span>🔄</span>
+        <span className="flex-1">Trocar usuário (inspeção)</span>
+        <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style={{ transform: switchOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s', color: T.text3 }}>
+          <path d="M1.5 3.5L4.5 6.5L7.5 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+        </svg>
+      </button>
+
+      {switchOpen && (
+        <div style={{ maxHeight: 220, overflowY: 'auto', borderTop: `1px solid ${T.border}` }}>
+          <p className="px-3 py-1.5 text-[9px] font-semibold uppercase tracking-widest" style={{ color: T.text3 }}>Inspection Mode</p>
+          {MOCK_USERS.map(u => {
+            const s = ROLE_CONTEXT_COLOR[u.role_context] ?? { color: T.accent, bg: T.accentDim }
+            const lbl = ROLE_CONTEXT_LABEL[u.role_context] ?? u.role_context
+            const isActive = u.user_id === activeUser.user_id
+            return (
+              <button
+                key={u.user_id}
+                onClick={() => { setActiveUser(u.user_id); setMenuOpen(false); setSwitchOpen(false) }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left transition-colors"
+                style={{ background: isActive ? `${s.color}14` : 'transparent' }}
+                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
+                onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+              >
+                <Avatar name={u.name} size="sm" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] font-medium truncate" style={{ color: isActive ? s.color : T.text1 }}>{u.name}</p>
+                  <p className="text-[10px]" style={{ color: T.text3 }}>{lbl}</p>
+                </div>
+                {isActive && (
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="flex-shrink-0">
+                    <path d="M2 5l2.5 2.5L8 2.5" stroke={s.color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Sign out */}
+      <div style={{ borderTop: `1px solid ${T.border}` }}>
+        <button
+          onClick={() => setMenuOpen(false)}
+          className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] text-left transition-colors"
+          style={{ color: T.crit }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+        >
+          <span>🚪</span>Sair
+        </button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div ref={ref} className="relative">
+      {menuDropdown}
+      {collapsed
+        ? <Tooltip label={`${name} — ${rcLabel}`} side="right">{btn}</Tooltip>
+        : btn
+      }
+    </div>
+  )
 }
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
