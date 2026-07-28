@@ -626,6 +626,7 @@ function issueToWID(issue: Issue): WorkItemData {
     dueDate:          issue.dueDate,
     points:           issue.points,
     fixVersions:      [],
+    availableEpics:   EPICS.map(e => ({ id: e.id, label: e.label, color: e.color })),
     acItems:          issue.acceptance_criteria_count
       ? Array.from({ length: issue.acceptance_criteria_count }, (_, i) => ({ id:`ac-${i}`, text:`Critério de aceite ${i+1}`, done: i === 0 }))
       : [],
@@ -648,6 +649,7 @@ function widToIssue(issue: Issue, updated: WorkItemData): Issue {
     blocked:                   updated.blocked,
     blocked_reason:            updated.blockedReason,
     description:               updated.description,
+    epic:                      updated.epicKey,
     comments:                  (updated.comments ?? []).map(c => ({ author: c.author, text: c.body, when: c.time })),
     acceptance_criteria_count: updated.acItems?.length,
   }

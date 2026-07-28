@@ -25,6 +25,11 @@ const INITIAL_DATA: WorkItemData = {
   dueDate:          'Abr 3',
   points:           3,
   fixVersions:      ['v2.4.1'],
+  availableEpics: [
+    { id:'EP-01', label:'Website Relaunch',    color:'#3B82F6' },
+    { id:'EP-02', label:'Infra & Eng',         color:'#F59E0B' },
+    { id:'EP-03', label:'Pesquisa & Conteúdo', color:'#A78BFA' },
+  ],
   createdAt:        '10 abr 2025',
   updatedAt:        '15 abr 2025',
   acItems: [

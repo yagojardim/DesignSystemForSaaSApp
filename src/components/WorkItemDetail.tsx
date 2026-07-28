@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { T } from './ds/tokens'
 import { AddRelationModal } from './AddRelationModal'
 import { useSession } from '../data/SessionContext'
@@ -24,6 +24,7 @@ export interface WorkItemData {
   epicKey?:          string
   epicLabel?:        string
   epicColor?:        string
+  availableEpics?:   { id: string; label: string; color: string }[]
   sprintName?:       string
   blocked?:          boolean
   blockedReason?:    string
@@ -211,6 +212,146 @@ function InlineSelect({ value, options, onChange, getLabel, getColor }: {
   )
 }
 
+// ─── Epic selector ────────────────────────────────────────────────────────────
+function EpicSelector({ value, epics, onChange }: {
+  value?:  string
+  epics:   { id: string; label: string; color: string }[]
+  onChange:(id: string | null) => void
+}) {
+  const [open,  setOpen]  = useState(false)
+  const [query, setQuery] = useState('')
+  const [hi,    setHi]    = useState(-1)
+  const containerRef      = useRef<HTMLDivElement>(null)
+  const inputRef          = useRef<HTMLInputElement>(null)
+
+  const selected = epics.find(e => e.id === value)
+
+  const NONE = { id: null as string | null, label: 'Nenhum / Remover épico', color: T.text3 }
+  const filtered = [
+    NONE,
+    ...epics
+      .filter(e =>
+        e.label.toLowerCase().includes(query.toLowerCase()) ||
+        e.id.toLowerCase().includes(query.toLowerCase())
+      )
+      .map(e => ({ ...e, id: e.id as string | null })),
+  ]
+
+  useEffect(() => {
+    if (!open) return
+    function onDown(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false); setQuery('')
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  useEffect(() => {
+    if (open) { const t = setTimeout(() => inputRef.current?.focus(), 30); return () => clearTimeout(t) }
+    else { setQuery(''); setHi(-1) }
+  }, [open])
+
+  function handleKey(e: React.KeyboardEvent) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHi(h => Math.min(h + 1, filtered.length - 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHi(h => Math.max(h - 1, 0)) }
+    else if (e.key === 'Enter' && hi >= 0) { e.preventDefault(); select(filtered[hi].id) }
+    else if (e.key === 'Escape') { setOpen(false) }
+  }
+
+  function select(id: string | null) {
+    onChange(id); setOpen(false); setQuery(''); setHi(-1)
+  }
+
+  return (
+    <div ref={containerRef} style={{ position:'relative' }}>
+      {/* Trigger */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display:'flex', alignItems:'center', gap:5, fontSize:12, padding:'2px 6px',
+          borderRadius:6, border:'none', background:'transparent', fontFamily:'inherit',
+          color: selected?.color ?? T.text3, cursor:'pointer',
+        }}
+        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
+        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+      >
+        {selected
+          ? <><span style={{ fontSize:10 }}>⚡</span>{selected.label}</>
+          : <span style={{ color:T.text3, fontStyle:'italic' }}>Nenhum</span>}
+        <span style={{ opacity:0.45, fontSize:9, color:T.text3 }}>▾</span>
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div
+          onKeyDown={handleKey}
+          style={{
+            position:'absolute', top:'calc(100% + 4px)', left:0, zIndex:300, width:230,
+            background:T.bgSurface, border:`1px solid ${T.border2}`, borderRadius:12,
+            boxShadow:T.shadowModal, overflow:'hidden',
+          }}
+        >
+          {/* Search */}
+          <div style={{ padding:'8px 10px', borderBottom:`1px solid ${T.border}` }}>
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={e => { setQuery(e.target.value); setHi(-1) }}
+              placeholder="Buscar épico…"
+              style={{
+                width:'100%', background:T.bgSurface2, border:`1px solid ${T.border}`,
+                borderRadius:8, padding:'5px 10px', color:T.text1, fontSize:12,
+                outline:'none', fontFamily:'inherit', boxSizing:'border-box',
+              }}
+              onFocus={e => { e.currentTarget.style.borderColor = T.accent }}
+              onBlur={e => { e.currentTarget.style.borderColor = T.border }}
+            />
+          </div>
+
+          {/* Options */}
+          <div style={{ maxHeight:200, overflowY:'auto', padding:'4px 0' }}>
+            {filtered.map((ep, i) => {
+              const isCurrent = ep.id === (value ?? null)
+              const isHi = i === hi
+              return (
+                <button
+                  key={ep.id ?? '__none__'}
+                  onClick={() => select(ep.id)}
+                  onMouseEnter={() => setHi(i)}
+                  style={{
+                    width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:8,
+                    padding:'7px 12px', border:'none', cursor:'pointer', fontSize:12,
+                    fontFamily:'inherit', fontWeight: isCurrent ? 700 : 400,
+                    background: isHi ? T.bgSurface2 : 'transparent',
+                    color: ep.id === null ? T.text3 : ep.color,
+                  }}
+                >
+                  {ep.id === null
+                    ? <span style={{ color:T.text3 }}>— {ep.label}</span>
+                    : <>
+                        <span style={{ fontSize:10 }}>⚡</span>
+                        <span style={{ flex:1 }}>{ep.label}</span>
+                        <span style={{ fontFamily:'monospace', fontSize:9, color:T.text3, opacity:0.7 }}>{ep.id}</span>
+                        {isCurrent && <span style={{ fontSize:10, color:T.accent }}>✓</span>}
+                      </>
+                  }
+                </button>
+              )
+            })}
+            {filtered.length === 1 && query && (
+              <p style={{ margin:0, fontSize:11, color:T.text3, padding:'8px 12px', fontStyle:'italic' }}>
+                Nenhum épico encontrado
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
   data:      WorkItemData
@@ -234,6 +375,7 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
   const [children,    setChildren]   = useState<WIChild[]>(data.children ?? [])
   const [linkedIssues,setLinkedIssues]=useState<WILinkedIssue[]>(data.linkedIssues ?? [])
   const [loading,     setLoading]    = useState(mode === 'drawer')
+  const [toast,       setToast]      = useState<string | null>(null)
 
   useEffect(() => {
     if (mode === 'drawer') {
@@ -296,6 +438,17 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
     setLinkedIssues(next); update({ linkedIssues: next }); setAddRelOpen(false)
   }
 
+  function showToast(msg: string) {
+    setToast(msg)
+    setTimeout(() => setToast(null), 2500)
+  }
+
+  function handleEpicChange(id: string | null) {
+    const epic = (data.availableEpics ?? []).find(e => e.id === id)
+    update({ epicKey: id ?? undefined, epicLabel: epic?.label, epicColor: epic?.color })
+    showToast('Épico atualizado')
+  }
+
   function handleAssignToMe() {
     const initials = activeUser.name.split(' ').slice(0,2).map((p: string)=>p[0]).join('')
     update({ assigneeInitials: initials, assigneeName: activeUser.name })
@@ -317,7 +470,7 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
   // ── Shell variables ───────────────────────────────────────────────────────────
   const panelStyle: React.CSSProperties = mode === 'drawer'
     ? { position:'fixed', top:0, right:0, bottom:0, width:560, background:T.bgSurface, borderLeft:`1px solid ${T.border}`, boxShadow:'-12px 0 48px rgba(0,0,0,0.55)', zIndex:301, display:'flex', flexDirection:'column', overflow:'hidden' }
-    : { display:'flex', flexDirection:'column', flex:1, overflow:'hidden', background:T.bgSurface }
+    : { position:'relative', display:'flex', flexDirection:'column', flex:1, overflow:'hidden', background:T.bgSurface }
 
   return (
     <>
@@ -703,9 +856,19 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
               )}
 
               {/* Epic */}
-              {local.epicLabel && (
+              {((data.availableEpics?.length ?? 0) > 0 || local.epicLabel) && (
                 <DetailRow label="Épico">
-                  <span style={{ fontSize:12, color:local.epicColor ?? T.warn }}>{local.epicLabel}</span>
+                  {canEdit && (data.availableEpics?.length ?? 0) > 0 ? (
+                    <EpicSelector
+                      value={local.epicKey}
+                      epics={data.availableEpics!}
+                      onChange={handleEpicChange}
+                    />
+                  ) : (
+                    <span style={{ fontSize:12, color:local.epicColor ?? T.warn }}>
+                      {local.epicLabel ?? <span style={{ color:T.text3, fontStyle:'italic' }}>Nenhum</span>}
+                    </span>
+                  )}
                 </DetailRow>
               )}
 
@@ -733,6 +896,21 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
           </>}
         </div>
       </div>
+
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position:'absolute', bottom:18, left:'50%', transform:'translateX(-50%)',
+          background:T.bgSurface2, border:`1px solid ${T.border2}`, borderRadius:10,
+          padding:'8px 18px', fontSize:12, fontWeight:600, color:T.text1,
+          boxShadow:T.shadow2, zIndex:400, whiteSpace:'nowrap',
+          display:'flex', alignItems:'center', gap:8,
+          animation:'slideUp 0.2s ease',
+        }}>
+          <span style={{ fontSize:14, color:T.success }}>✓</span>
+          {toast}
+        </div>
+      )}
     </>
   )
 }
