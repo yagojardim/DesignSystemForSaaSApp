@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Avatar } from './ds/Avatar'
 import { T } from './ds/tokens'
-import { getActiveUser, setActiveUser, MOCK_USERS } from '../data/session'
+import { MOCK_USERS } from '../data/session'
+import { useSession } from '../data/SessionContext'
 
 type View = 'home' | 'foundations' | 'dashboard' | 'project' | 'issue' | 'client' | 'task-drawer' | 'projects-list' | 'gantt' | 'calendar' | 'list' | 'timeline' | 'epics' | 'releases' | 'filters' | 'navigator' | 'reports' | 'automations' | 'config' | 'team' | 'my-tasks' | 'login' | 'role-dashboard' | 'client-access' | 'client-login'
 
@@ -9,7 +10,6 @@ interface HeaderProps {
   onCreateIssue?: () => void
   currentView:    View
   onViewChange:   (v: string) => void
-  onUserChange:   (userId: string) => void
 }
 
 const viewLabels: Record<View, string> = {
@@ -71,20 +71,19 @@ const NOTIFICATIONS = [
   { icon: '⚡', text: 'Sprint 14 termina em 3 dias',         time: '1d' },
 ]
 
-export function Header({ currentView, onViewChange, onUserChange, onCreateIssue }: HeaderProps) {
+export function Header({ currentView, onViewChange, onCreateIssue }: HeaderProps) {
   const [cmdOpen,    setCmdOpen]    = useState(false)
   const [notifOpen,  setNotifOpen]  = useState(false)
   const [switchOpen, setSwitchOpen] = useState(false)
   const [readAll,    setReadAll]    = useState(false)
 
-  const activeUser = getActiveUser()
+  const { activeUser, setActiveUser } = useSession()
   const rc         = activeUser.role_context
   const rcStyle    = ROLE_CONTEXT_COLOR[rc] ?? { color: T.accent, bg: T.accentDim }
   const rcLabel    = ROLE_CONTEXT_LABEL[rc] ?? rc
 
   function handleSwitchUser(userId: string) {
     setActiveUser(userId)
-    onUserChange(userId)
     setSwitchOpen(false)
   }
 

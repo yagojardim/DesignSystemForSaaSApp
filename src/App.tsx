@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Shell, type View } from './components/Shell'
-import { getActiveUser } from './data/session'
+import { SessionProvider, useSession } from './data/SessionContext'
 import FoundationsPage from './pages/FoundationsPage'
 import DashboardPage from './pages/DashboardPage'
 import ProjectPage from './pages/ProjectPage'
@@ -28,8 +28,7 @@ import DashboardHomePage from './pages/DashboardHomePage'
 import TeamPage from './pages/TeamPage'
 import MyTasksPage from './pages/MyTasksPage'
 import RoleDashboard from './pages/RoleDashboard'
-import { setActiveUser, MOCK_USERS } from './data/session'
-
+import { MOCK_USERS } from './data/session'
 import InviteMemberModal from './components/InviteMemberModal'
 
 const ALL_VIEWS: View[] = [
@@ -53,13 +52,21 @@ export const VIEW_LABELS: Record<View, string> = {
 }
 
 export default function App() {
+  return (
+    <SessionProvider>
+      <AppInner />
+    </SessionProvider>
+  )
+}
+
+function AppInner() {
+  const { setActiveUser } = useSession()
   const [view, setView] = useState<View>('home')
 
   if (view === 'login') {
     return (
       <LoginPage
         onSuccess={(roleStr) => {
-          // Map LoginPage role labels → session user_ids
           const roleMap: Record<string, string> = {
             'PMO': 'u_pmo', 'PM': 'u_pm', 'P.O': 'u_po', 'SM': 'u_sm',
             'TechLead': 'u_tl', 'Dev': 'u_dev', 'UX/UI': 'u_ux', 'QA': 'u_qa',
@@ -133,13 +140,6 @@ export default function App() {
 function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void }) {
   const [createOpen, setCreate] = useState(false)
   const [inviteOpen, setInvite] = useState(false)
-  // _userKey drives re-renders when the active user changes via the inspection switcher
-  const [_userKey, setUserKey]  = useState(() => getActiveUser().user_id)
-
-  function handleUserChange(userId: string) {
-    setActiveUser(userId)
-    setUserKey(userId)
-  }
 
   return (
     <>
@@ -149,7 +149,7 @@ function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void })
       {inviteOpen && (
         <InviteMemberModal onClose={()=>setInvite(false)} />
       )}
-      <Shell currentView={view} onViewChange={setView} onUserChange={handleUserChange} onCreateIssue={()=>setCreate(true)}>
+      <Shell currentView={view} onViewChange={setView} onCreateIssue={()=>setCreate(true)}>
         {view==='home'          && <div className="h-full overflow-y-auto dark-shell"><DashboardHomePage onNav={v => { if (ALL_VIEWS.includes(v as View)) setView(v as View) }} onInvite={() => setInvite(true)} /></div>}
         {view==='projects-list' && <div className="h-full overflow-y-auto dark-shell"><ProjectsListPage/></div>}
         {view==='gantt'         && <div className="h-full overflow-hidden"><GanttPage/></div>}

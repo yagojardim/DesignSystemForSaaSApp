@@ -1,13 +1,7 @@
 import { T } from '../components/ds/tokens'
-import type { Role } from '../components/Shell'
-
-// ─── Role-visibility rule (annotated inline for each widget)
-// [ROLE Admin]  — full personal + team overview + approvals
-// [ROLE Member] — personal + sprint progress + activity
-// [ROLE Viewer] — project status only + upcoming milestones
 
 interface HomePageProps {
-  role: Role
+  role: string
 }
 
 // ─── Sample data ─────────────────────────────────────────────────────────────

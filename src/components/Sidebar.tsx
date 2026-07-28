@@ -3,35 +3,28 @@ import { useState, useRef, useEffect } from 'react'
 import { Avatar } from './ds/Avatar'
 import { Tooltip } from './ds/Tooltip'
 import { T } from './ds/tokens'
-import { getActiveUser } from '../data/session'
+import { useSession } from '../data/SessionContext'
 import { can, type Capability } from '../data/permissions'
 
-// Legacy type alias kept so Shell.tsx re-export doesn't break downstream
-export type Role = 'Admin' | 'Member' | 'Viewer'
-
 interface SidebarProps {
-  collapsed:  boolean
-  onToggle:   () => void
-  activeNav:  string
-  onNav:      (id: string) => void
+  collapsed: boolean
+  onToggle:  () => void
+  activeNav: string
+  onNav:     (id: string) => void
 }
 
 // ─── Nav definition ───────────────────────────────────────────────────────────
 interface NavItem {
-  id:       string
-  label:    string
-  icon:     () => React.ReactElement
-  badge?:   string
-  // cap: if set, item shown only if user has this capability
-  cap?:     Capability
-  // minRole: coarse gate (Admin > Member > Viewer)
-  minRole?: 'Admin' | 'Member'
+  id:    string
+  label: string
+  icon:  () => React.ReactElement
+  badge?: string
+  cap?:  Capability  // if set, shown only when user has this capability
 }
 
 interface NavGroup {
-  label:    string
-  minRole?: 'Admin' | 'Member'
-  items:    NavItem[]
+  label: string
+  items: NavItem[]
 }
 
 const ALL_GROUPS: NavGroup[] = [
@@ -50,7 +43,6 @@ const ALL_GROUPS: NavGroup[] = [
   },
   {
     label: 'Gestão',
-    minRole: 'Member',
     items: [
       { id: 'projects-list', label: 'Projetos & Tarefas', icon: ProjectIcon },
       { id: 'project',       label: 'Kanban Board',       icon: BoardIcon   },
@@ -62,9 +54,7 @@ const ALL_GROUPS: NavGroup[] = [
   },
   {
     label: 'Planejamento',
-    minRole: 'Member',
     items: [
-      // Épicos — gated by create:epic capability
       { id: 'epics',     label: 'Épicos',         icon: EpicNavIcon, cap: 'create:epic'    },
       { id: 'releases',  label: 'Releases',        icon: ReleaseIcon                       },
       { id: 'filters',   label: 'Filtros & Busca', icon: FilterIcon                        },
@@ -73,7 +63,6 @@ const ALL_GROUPS: NavGroup[] = [
   },
   {
     label: 'Configuração',
-    minRole: 'Admin',
     items: [
       { id: 'config',        label: 'Configurações',        icon: ConfigIcon, cap: 'users:manage' },
       { id: 'automations',   label: 'Automações',           icon: AutomIcon,  cap: 'users:manage' },
@@ -83,7 +72,6 @@ const ALL_GROUPS: NavGroup[] = [
   },
   {
     label: 'Mais',
-    minRole: 'Admin',
     items: [
       { id: 'team',         label: 'Time & Permissões', icon: TeamIcon,    cap: 'users:manage' },
       { id: 'reports',      label: 'Relatórios',        icon: ReportsIcon                     },
@@ -542,12 +530,12 @@ const ROLE_CONTEXT_LABEL: Record<string, string> = {
 }
 
 function UserBlock({ collapsed }: { collapsed: boolean }) {
-  const activeUser = getActiveUser()
-  const name       = activeUser?.name  ?? 'Usuário'
-  const email      = activeUser?.email ?? ''
-  const rc         = activeUser?.role_context ?? 'Dev'
-  const rs         = ROLE_CONTEXT_COLOR[rc] ?? { color: T.accent, bg: T.accentDim }
-  const rcLabel    = ROLE_CONTEXT_LABEL[rc] ?? rc
+  const { activeUser } = useSession()
+  const name    = activeUser.name
+  const email   = activeUser.email
+  const rc      = activeUser.role_context
+  const rs      = ROLE_CONTEXT_COLOR[rc] ?? { color: T.accent, bg: T.accentDim }
+  const rcLabel = ROLE_CONTEXT_LABEL[rc] ?? rc
 
   const btn = (
     <button
@@ -591,10 +579,10 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav }: SidebarProps)
     setProjectsOpen(next)
   }
 
-  const activeUser  = getActiveUser()
-  const permissions = activeUser?.permissions ?? []
-  const groups      = getGroups(permissions)
-  const canLogHours = can(permissions, 'log:hours')
+  const { activeUser } = useSession()
+  const permissions    = activeUser.permissions
+  const groups         = getGroups(permissions)
+  const canLogHours    = can(permissions, 'log:hours')
 
   const sidebarStyle: React.CSSProperties = {
     width: collapsed ? 56 : 240,

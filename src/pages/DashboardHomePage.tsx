@@ -1,4 +1,5 @@
 import { useState, useEffect, type ReactNode } from 'react'
+import { useSession } from '../data/SessionContext'
 import { T } from '../components/ds/tokens'
 import {
   KpiCard, RagCard, ProgressCard, WorkQueue, SprintDonutCard,
@@ -8,7 +9,7 @@ import {
   type WorkItem, type FilterState, type RagStatus,
 } from '../components/ds/DashboardKit'
 import {
-  MOCK_TENANT, MOCK_USERS, getActiveScope, getActiveUser, setActiveUser,
+  MOCK_TENANT, MOCK_USERS, getActiveScope,
   DASHBOARD_CATALOG, type UserScope, type DashboardType,
 } from '../data/session'
 // MOCK_TENANT used in ProductOwnerPanel for client feed scoping
@@ -924,7 +925,7 @@ function AssignedReportCards({ dashId, tenantId, onNav }: { dashId: DashboardTyp
 // ─── Inspection user switcher ─────────────────────────────────────────────────
 function InspectionSwitcher({ onUserChange }: { onUserChange: () => void }) {
   const [open, setOpen] = useState(false)
-  const active = getActiveUser()
+  const { activeUser: active, setActiveUser } = useSession()
   return (
     <div style={{ position: 'relative' }}>
       <button onClick={() => setOpen(o => !o)} style={{
@@ -967,6 +968,7 @@ function InspectionSwitcher({ onUserChange }: { onUserChange: () => void }) {
 interface Props { onNav?: (view: string) => void; onInvite?: () => void }
 
 export default function DashboardHomePage({ onNav, onInvite }: Props) {
+  const { activeUser: user } = useSession()
   const [scope, setScope]           = useState<UserScope | null>(null)
   const [activeDashId, setActiveDash] = useState<DashboardType | null>(null)
   const [rev, setRev]               = useState(0)
@@ -975,7 +977,7 @@ export default function DashboardHomePage({ onNav, onInvite }: Props) {
     const s = getActiveScope()
     setScope(s)
     setActiveDash(s.default_dashboard.dashboard_id as DashboardType)
-  }, [rev])
+  }, [rev, user.user_id])
 
   const activeDef = activeDashId ? DASHBOARD_CATALOG[activeDashId] : null
 
@@ -987,8 +989,6 @@ export default function DashboardHomePage({ onNav, onInvite }: Props) {
       </div>
     )
   }
-
-  const user = getActiveUser()
   const assignedDefs = scope.assigned_dashboards.map(d => ({
     dashboard_id: d.dashboard_id,
     label: DASHBOARD_CATALOG[d.dashboard_id as DashboardType]?.label ?? d.dashboard_id,

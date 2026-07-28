@@ -13,7 +13,6 @@ interface ShellProps {
   children:     ReactNode
   currentView:  View
   onViewChange: (v: View) => void
-  onUserChange: (userId: string) => void
   onCreateIssue?: () => void
 }
 
@@ -24,7 +23,7 @@ const VALID_VIEWS: View[] = [
   'login','role-dashboard','client-access','client-login',
 ]
 
-export function Shell({ children, currentView, onViewChange, onUserChange, onCreateIssue }: ShellProps) {
+export function Shell({ children, currentView, onViewChange, onCreateIssue }: ShellProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [activeNav, setActiveNav] = useState<string>(currentView)
 
@@ -40,7 +39,6 @@ export function Shell({ children, currentView, onViewChange, onUserChange, onCre
         <Header
           currentView={currentView}
           onViewChange={v => { onViewChange(v as View); setActiveNav(v) }}
-          onUserChange={onUserChange}
           onCreateIssue={onCreateIssue}
         />
         <main className="flex-1 overflow-hidden">{children}</main>
@@ -49,5 +47,3 @@ export function Shell({ children, currentView, onViewChange, onUserChange, onCre
   )
 }
 
-// Keep Role export for any residual imports that haven't been cleaned up
-export type { Role } from './Sidebar'
