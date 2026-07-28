@@ -4,6 +4,7 @@ import { T } from './ds/tokens'
 interface CompleteSprintProps {
   sprint: { id: string; name: string; goal?: string }
   stats: { done: number; total: number; remaining: number }
+  nextSprintName?: string
   onClose: () => void
   onConfirm: (moveRemaining: 'next-sprint' | 'backlog') => void
 }
@@ -45,11 +46,11 @@ const inputStyle: React.CSSProperties = {
   fontFamily: 'inherit',
 }
 
-export function CompleteSprintModal({ sprint, stats, onClose, onConfirm }: CompleteSprintProps) {
+export function CompleteSprintModal({ sprint, stats, nextSprintName, onClose, onConfirm }: CompleteSprintProps) {
   const [move, setMove] = useState<'next-sprint' | 'backlog'>('next-sprint')
   const [comment, setComment] = useState('')
 
-  const velocity = stats.done * 3 // simple pts approximation
+  const velocity = stats.done * 3
 
   function handleConfirm() {
     onConfirm(move)
@@ -148,7 +149,7 @@ export function CompleteSprintModal({ sprint, stats, onClose, onConfirm }: Compl
                   <span style={{ fontSize: 18 }}>→</span>
                   <div>
                     <p style={{ fontSize: 13, fontWeight: 600 }}>Mover para o próximo sprint</p>
-                    <p style={{ fontSize: 11, color: T.text3, marginTop: 2 }}>Sprint 15</p>
+                    <p style={{ fontSize: 11, color: T.text3, marginTop: 2 }}>{nextSprintName ?? 'Próxima sprint planejada'}</p>
                   </div>
                 </button>
 

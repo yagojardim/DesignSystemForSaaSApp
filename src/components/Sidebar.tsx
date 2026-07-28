@@ -6,7 +6,7 @@ import { T } from './ds/tokens'
 import { getActiveUser } from '../data/session'
 import { can, type Capability } from '../data/permissions'
 
-// ─── Role type (legacy coarse gate, kept for Shell compat) ───────────────────
+// Legacy type alias kept so Shell.tsx re-export doesn't break downstream
 export type Role = 'Admin' | 'Member' | 'Viewer'
 
 interface SidebarProps {
@@ -14,7 +14,6 @@ interface SidebarProps {
   onToggle:   () => void
   activeNav:  string
   onNav:      (id: string) => void
-  role:       Role
 }
 
 // ─── Nav definition ───────────────────────────────────────────────────────────
@@ -94,20 +93,15 @@ const ALL_GROUPS: NavGroup[] = [
   },
 ]
 
-const ROLE_RANK: Record<Role, number> = { Viewer: 0, Member: 1, Admin: 2 }
-
-function ClockIcon()     { return <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.2"/><path d="M6.5 4v2.5l1.5 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg> }
+function ClockIcon()    { return <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.2"/><path d="M6.5 4v2.5l1.5 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg> }
 function MyTasksIcon()   { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 3.5h10M2 7h10M2 10.5h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><circle cx="11" cy="10.5" r="2" stroke="currentColor" strokeWidth="1.2"/><path d="M10 10.5l.75.75L12 9.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/></svg> }
 
-function getGroups(role: Role, permissions: string[]): NavGroup[] {
-  const perms = permissions ?? []
+function getGroups(permissions: string[]): NavGroup[] {
   return ALL_GROUPS
-    .filter(g => !g.minRole || ROLE_RANK[role] >= ROLE_RANK[g.minRole])
     .map(g => ({
       ...g,
       items: g.items.filter(item => {
-        if (item.minRole && ROLE_RANK[role] < ROLE_RANK[item.minRole]) return false
-        if (item.cap && !can(perms, item.cap)) return false
+        if (item.cap && !can(permissions, item.cap)) return false
         return true
       }),
     }))
@@ -527,18 +521,34 @@ function WorkspaceSelector({ collapsed }: { collapsed: boolean }) {
 }
 
 // ─── User block ───────────────────────────────────────────────────────────────
-const ROLE_STYLE: Record<Role, { color: string; bg: string }> = {
-  Admin:  { color: T.accent,  bg: T.accentDim  },
-  Member: { color: T.success, bg: T.successDim },
-  Viewer: { color: T.text3,   bg: T.neutralDim },
+const ROLE_CONTEXT_COLOR: Record<string, { color: string; bg: string }> = {
+  Admin:          { color: '#a78bfa', bg: 'rgba(167,139,250,0.15)' },
+  PMO:            { color: '#7d92ff', bg: 'rgba(125,146,255,0.15)' },
+  ProjectManager: { color: T.accent,  bg: T.accentDim },
+  ProductManager: { color: '#35c9ae', bg: 'rgba(53,201,174,0.15)' },
+  ProductOwner:   { color: T.success, bg: T.successDim },
+  ScrumMaster:    { color: '#e6b23c', bg: 'rgba(230,178,60,0.15)' },
+  TechLead:       { color: '#f0805c', bg: 'rgba(240,128,92,0.15)' },
+  Dev:            { color: '#38bdf8', bg: 'rgba(56,189,248,0.15)' },
+  UX:             { color: '#f472b6', bg: 'rgba(244,114,182,0.15)' },
+  QA:             { color: '#4ade80', bg: 'rgba(74,222,128,0.15)' },
 }
 
-function UserBlock({ collapsed, role }: { collapsed: boolean; role: Role }) {
-  const rs = ROLE_STYLE[role]
+const ROLE_CONTEXT_LABEL: Record<string, string> = {
+  Admin: 'Admin Master', PMO: 'PMO', ProjectManager: 'Project Manager',
+  ProductManager: 'Product Manager', ProductOwner: 'Product Owner',
+  ScrumMaster: 'Scrum Master', TechLead: 'Tech Lead',
+  Dev: 'Dev', UX: 'UX / UI', QA: 'QA',
+}
+
+function UserBlock({ collapsed }: { collapsed: boolean }) {
   const activeUser = getActiveUser()
-  const name  = activeUser?.name  ?? 'Usuário'
-  const email = activeUser?.email ?? ''
-  const roleLabel = activeUser?.role_context ?? role
+  const name       = activeUser?.name  ?? 'Usuário'
+  const email      = activeUser?.email ?? ''
+  const rc         = activeUser?.role_context ?? 'Dev'
+  const rs         = ROLE_CONTEXT_COLOR[rc] ?? { color: T.accent, bg: T.accentDim }
+  const rcLabel    = ROLE_CONTEXT_LABEL[rc] ?? rc
+
   const btn = (
     <button
       className={`flex items-center gap-2.5 rounded-xl transition-colors ${collapsed ? 'w-10 h-10 justify-center' : 'w-full px-3 py-2.5'}`}
@@ -552,7 +562,7 @@ function UserBlock({ collapsed, role }: { collapsed: boolean; role: Role }) {
             <div className="flex items-center gap-1.5">
               <p className="text-[13px] font-medium truncate leading-tight" style={{ color: T.text1 }}>{name}</p>
               <span className="text-[9px] font-bold px-1.5 py-px rounded-full flex-shrink-0" style={{ color: rs.color, background: rs.bg }}>
-                {roleLabel}
+                {rcLabel}
               </span>
             </div>
             <p className="text-[10px] truncate mt-0.5" style={{ color: T.text3 }}>{email}</p>
@@ -567,12 +577,12 @@ function UserBlock({ collapsed, role }: { collapsed: boolean; role: Role }) {
     </button>
   )
   return collapsed ? (
-    <Tooltip label={`${name} — ${roleLabel}`} side="right">{btn}</Tooltip>
+    <Tooltip label={`${name} — ${rcLabel}`} side="right">{btn}</Tooltip>
   ) : btn
 }
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
-export function Sidebar({ collapsed, onToggle, activeNav, onNav, role }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle, activeNav, onNav }: SidebarProps) {
   const [projectsOpen, setProjectsOpen] = useState(_projectsOpen)
 
   function toggleProjects() {
@@ -581,9 +591,9 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav, role }: Sidebar
     setProjectsOpen(next)
   }
 
-  const activeUser = getActiveUser()
+  const activeUser  = getActiveUser()
   const permissions = activeUser?.permissions ?? []
-  const groups = getGroups(role, permissions)
+  const groups      = getGroups(permissions)
   const canLogHours = can(permissions, 'log:hours')
 
   const sidebarStyle: React.CSSProperties = {
@@ -733,7 +743,7 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav, role }: Sidebar
 
       {/* User block (pinned bottom) */}
       <div className="flex-shrink-0 px-1.5 py-2" style={{ borderTop: `1px solid ${T.border}` }}>
-        <UserBlock collapsed={collapsed} role={role} />
+        <UserBlock collapsed={collapsed} />
       </div>
     </aside>
   )

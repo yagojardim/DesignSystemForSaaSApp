@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Shell, type View } from './components/Shell'
+import { getActiveUser } from './data/session'
 import FoundationsPage from './pages/FoundationsPage'
 import DashboardPage from './pages/DashboardPage'
 import ProjectPage from './pages/ProjectPage'
@@ -20,14 +21,15 @@ import AutomationsPage from './pages/AutomationsPage'
 import ConfigPage from './pages/ConfigPage'
 import { CreateIssueModal } from './components/CreateIssueModal'
 import { CatalogProvider } from './data/CatalogContext'
-import type { Role } from './components/Sidebar'
 import LoginPage from './pages/LoginPage'
 import ClientAccessPage from './pages/ClientAccessPage'
 import ClientLoginPage from './pages/ClientLoginPage'
 import DashboardHomePage from './pages/DashboardHomePage'
 import TeamPage from './pages/TeamPage'
 import MyTasksPage from './pages/MyTasksPage'
+import RoleDashboard from './pages/RoleDashboard'
 import { setActiveUser, MOCK_USERS } from './data/session'
+
 import InviteMemberModal from './components/InviteMemberModal'
 
 const ALL_VIEWS: View[] = [
@@ -35,7 +37,7 @@ const ALL_VIEWS: View[] = [
   'list','timeline','epics','releases','filters','navigator',
   'reports','automations','config','team','my-tasks',
   'issue','client','task-drawer',
-  'login','client-access','client-login',
+  'login','role-dashboard','client-access','client-login',
 ]
 
 export const VIEW_LABELS: Record<View, string> = {
@@ -129,9 +131,15 @@ export default function App() {
 }
 
 function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void }) {
-  const [role, setRole]           = useState<Role>('Admin')
-  const [createOpen, setCreate]   = useState(false)
-  const [inviteOpen, setInvite]   = useState(false)
+  const [createOpen, setCreate] = useState(false)
+  const [inviteOpen, setInvite] = useState(false)
+  // _userKey drives re-renders when the active user changes via the inspection switcher
+  const [_userKey, setUserKey]  = useState(() => getActiveUser().user_id)
+
+  function handleUserChange(userId: string) {
+    setActiveUser(userId)
+    setUserKey(userId)
+  }
 
   return (
     <>
@@ -141,7 +149,7 @@ function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void })
       {inviteOpen && (
         <InviteMemberModal onClose={()=>setInvite(false)} />
       )}
-      <Shell currentView={view} onViewChange={setView} role={role} onRoleChange={setRole} onCreateIssue={()=>setCreate(true)}>
+      <Shell currentView={view} onViewChange={setView} onUserChange={handleUserChange} onCreateIssue={()=>setCreate(true)}>
         {view==='home'          && <div className="h-full overflow-y-auto dark-shell"><DashboardHomePage onNav={v => { if (ALL_VIEWS.includes(v as View)) setView(v as View) }} onInvite={() => setInvite(true)} /></div>}
         {view==='projects-list' && <div className="h-full overflow-y-auto dark-shell"><ProjectsListPage/></div>}
         {view==='gantt'         && <div className="h-full overflow-hidden"><GanttPage/></div>}
@@ -161,6 +169,7 @@ function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void })
         {view==='project'       && <div className="h-full overflow-hidden dark-shell"><ProjectPage/></div>}
         {view==='issue'         && <div className="h-full overflow-hidden dark-shell"><IssueDetailPage/></div>}
         {view==='task-drawer'   && <div className="h-full overflow-hidden dark-shell"><TaskDrawerPage/></div>}
+        {view==='role-dashboard' && <div className="h-full dark-shell"><RoleDashboard onBack={() => setView('home')} /></div>}
       </Shell>
     </>
   )

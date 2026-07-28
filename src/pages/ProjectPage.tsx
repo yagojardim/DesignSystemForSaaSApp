@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { T as DS } from '../components/ds/tokens'
 import { CreateIssueModal } from '../components/CreateIssueModal'
 import { CompleteSprintModal } from '../components/CompleteSprintModal'
+import { getActiveUser } from '../data/session'
+import { can } from '../data/permissions'
 
 // ─── RULE annotations ────────────────────────────────────────────────────────
 // RULE 1: "planejado não é sobrescrito" — planned sprint data is immutable until explicitly started
@@ -30,14 +32,18 @@ interface Issue {
 }
 
 interface SprintDef {
-  id:     string
-  name:   string
-  goal?:  string
-  start:  string
-  end:    string
-  state:  'active' | 'planned' | 'completed'
-  velocity?: number      // completed story points (for completed sprints)
+  id:          string
+  name:        string
+  goal?:       string
+  start:       string
+  end:         string
+  state:       'active' | 'planned' | 'completed'
+  velocity?:   number
+  completedAt?: string
 }
+
+// Module-level audit log (session-persistent mock)
+const _SPRINT_AUDIT: { ts: string; who: string; action: string }[] = []
 
 // ─── Board column definitions ─────────────────────────────────────────────────
 // RULE 2 — label is independent; statuses[] is the mapping
@@ -939,7 +945,13 @@ function BacklogRow({ issue, epicColor }: { issue: Issue; epicColor: string }) {
 }
 
 // ─── Backlog tab ──────────────────────────────────────────────────────────────
-function BacklogTab({ issues, onCreateIssue, onCompleteSprint }: { issues: Issue[]; onCreateIssue: () => void; onCompleteSprint: (sprint: typeof SPRINTS[number]) => void }) {
+function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onCompleteSprint }: {
+  issues: Issue[]
+  sprints: SprintDef[]
+  canManageSprint: boolean
+  onCreateIssue: () => void
+  onCompleteSprint: (sprint: SprintDef) => void
+}) {
   const [collapsed, setCollapsed]     = useState<Set<string>>(new Set())
   const [startingSprint, setStarting] = useState<SprintDef | null>(null)
   const [sprintStates, setSprintStates] = useState<Record<string,string>>({})
@@ -974,7 +986,7 @@ function BacklogTab({ issues, onCreateIssue, onCompleteSprint }: { issues: Issue
       <div className="max-w-4xl mx-auto px-4 py-4 space-y-3">
 
         {/* Sprint containers */}
-        {SPRINTS.map(sprint => {
+        {sprints.map(sprint => {
           const sprintIssues = issues.filter(i => i.sprint === sprint.id)
           const totalPts = sprintIssues.reduce((s, i) => s + i.points, 0)
           const donePts  = sprintIssues.filter(i => i.status === 'done').reduce((s, i) => s + i.points, 0)
@@ -1029,22 +1041,36 @@ function BacklogTab({ issues, onCreateIssue, onCompleteSprint }: { issues: Issue
                 <div className="ml-auto flex items-center gap-2" onClick={e => e.stopPropagation()}>
                   {sprint.state === 'planned' && (
                     <button
-                      onClick={() => setStarting(sprint)}
-                      className="h-6 px-3 text-[11px] font-semibold rounded-lg transition-all text-white"
-                      style={{ background: DS.accent }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.15)' }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.filter = 'none' }}
+                      onClick={canManageSprint ? () => setStarting(sprint) : undefined}
+                      disabled={!canManageSprint}
+                      title={!canManageSprint ? 'Requer permissão: Gerenciar Sprint (Admin, Project Manager ou Scrum Master)' : undefined}
+                      className="h-6 px-3 text-[11px] font-semibold rounded-lg transition-all"
+                      style={{
+                        background: canManageSprint ? DS.accent : S.surface2,
+                        color: canManageSprint ? '#fff' : S.t3,
+                        border: canManageSprint ? 'none' : `1px solid ${S.border}`,
+                        cursor: canManageSprint ? 'pointer' : 'not-allowed',
+                      }}
+                      onMouseEnter={canManageSprint ? e => { (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.15)' } : undefined}
+                      onMouseLeave={canManageSprint ? e => { (e.currentTarget as HTMLButtonElement).style.filter = 'none' } : undefined}
                     >
                       Iniciar Sprint
                     </button>
                   )}
                   {sprint.state === 'active' && (
                     <button
-                      onClick={() => onCompleteSprint(sprint)}
+                      onClick={canManageSprint ? () => onCompleteSprint(sprint) : undefined}
+                      disabled={!canManageSprint}
+                      title={!canManageSprint ? 'Requer permissão: Gerenciar Sprint (Admin, Project Manager ou Scrum Master)' : undefined}
                       className="h-6 px-3 text-[11px] font-medium rounded-lg transition-colors"
-                      style={{ border: `1px solid ${S.border}`, color: S.t2 }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = S.border2 }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = S.border }}
+                      style={{
+                        border: `1px solid ${S.border}`,
+                        color: canManageSprint ? S.t2 : S.t3,
+                        cursor: canManageSprint ? 'pointer' : 'not-allowed',
+                        opacity: canManageSprint ? 1 : 0.5,
+                      }}
+                      onMouseEnter={canManageSprint ? e => { (e.currentTarget as HTMLButtonElement).style.borderColor = S.border2 } : undefined}
+                      onMouseLeave={canManageSprint ? e => { (e.currentTarget as HTMLButtonElement).style.borderColor = S.border } : undefined}
                     >
                       Concluir Sprint
                     </button>
@@ -1175,11 +1201,11 @@ function BacklogTab({ issues, onCreateIssue, onCompleteSprint }: { issues: Issue
 }
 
 // ─── Sprints tab ──────────────────────────────────────────────────────────────
-function SprintsTab({ issues }: { issues: Issue[] }) {
+function SprintsTab({ issues, sprints }: { issues: Issue[]; sprints: SprintDef[] }) {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-4xl mx-auto px-4 py-4 space-y-3">
-        {SPRINTS.map(sprint => {
+        {sprints.map(sprint => {
           const si        = issues.filter(i => i.sprint === sprint.id)
           const total     = si.reduce((s, i) => s + i.points, 0)
           const done      = si.filter(i => i.status === 'done')
@@ -1282,18 +1308,70 @@ function SprintsTab({ issues }: { issues: Issue[] }) {
 }
 
 // ─── Page shell ───────────────────────────────────────────────────────────────
-type Tab = 'Board' | 'Backlog' | 'Sprints' | 'Timeline'
+type Tab = 'Board' | 'Backlog' | 'Sprints'
 
 export default function ProjectPage() {
   const [tab, setTab]     = useState<Tab>('Board')
-  const [issues, setIssues] = useState<Issue[]>(INIT_ISSUES)
+  const [issues, setIssues]   = useState<Issue[]>(INIT_ISSUES)
+  const [sprints, setSprints] = useState<SprintDef[]>(SPRINTS)
   const [quickCreate, setQuickCreate] = useState<{colStatus?:string}|null>(null)
-  const [completingSprint, setCompletingSprint] = useState<typeof SPRINTS[number]|null>(null)
+  const [completingSprint, setCompletingSprint] = useState<SprintDef|null>(null)
+  const [toast, setToast] = useState<string|null>(null)
+
+  const activeUser        = getActiveUser()
+  const canManageSprint   = can(activeUser.permissions, 'sprint:manage')
+
+  const activeSprint      = sprints.find(s => s.state === 'active')
+  const activeSid         = activeSprint?.id ?? 's14'
+
+  function handleCompleteSprint(moveRemaining: 'next-sprint' | 'backlog') {
+    if (!completingSprint) return
+    const sprintId      = completingSprint.id
+    const nextPlanned   = sprints.find(s => s.state === 'planned')
+    const destination   = moveRemaining === 'next-sprint' && nextPlanned ? 'next-sprint' : 'backlog'
+    const destSprintId  = destination === 'next-sprint' ? nextPlanned!.id : undefined
+    const destLabel     = destination === 'next-sprint' ? nextPlanned!.name : 'backlog'
+
+    const sprintIssues  = issues.filter(i => i.sprint === sprintId)
+    const doneItems     = sprintIssues.filter(i => i.status === 'done')
+    const remaining     = sprintIssues.filter(i => i.status !== 'done')
+    const velocity      = doneItems.reduce((s, i) => s + i.points, 0)
+
+    // Move non-done issues
+    setIssues(prev => prev.map(i => {
+      if (i.sprint !== sprintId || i.status === 'done') return i
+      return destination === 'next-sprint'
+        ? { ...i, sprint: destSprintId }
+        : { ...i, sprint: undefined, status: 'backlog' as const }
+    }))
+
+    // Mark sprint completed
+    setSprints(prev => prev.map(s => s.id === sprintId
+      ? { ...s, state: 'completed' as const, velocity, completedAt: new Date().toLocaleDateString('pt-BR') }
+      : s
+    ))
+
+    // Audit log
+    _SPRINT_AUDIT.push({
+      ts:     new Date().toISOString(),
+      who:    activeUser.name,
+      action: `Encerrou ${completingSprint.name}: ${doneItems.length} concluídos, ${remaining.length} movidos → ${destLabel}`,
+    })
+
+    // Toast feedback
+    const fallbackNote = moveRemaining === 'next-sprint' && !nextPlanned
+      ? ' (sem próxima sprint planejada, movido para backlog)'
+      : ''
+    const n = remaining.length
+    setToast(`Sprint encerrada — ${n} ${n === 1 ? 'item movido' : 'itens movidos'} para ${destLabel}${fallbackNote}`)
+    setTimeout(() => setToast(null), 4500)
+    setCompletingSprint(null)
+  }
 
   const tabBadges: Partial<Record<Tab, number>> = {
-    Board:   issues.filter(i => i.sprint === 's14').length,
-    Backlog: issues.filter(i => !i.sprint || i.sprint === 's15').length,
-    Sprints: SPRINTS.length,
+    Board:   issues.filter(i => i.sprint === activeSid).length,
+    Backlog: issues.filter(i => !i.sprint || i.sprint === sprints.find(s => s.state === 'planned')?.id).length,
+    Sprints: sprints.length,
   }
 
   return (
@@ -1315,7 +1393,7 @@ export default function ProjectPage() {
 
         {/* Tabs */}
         <div className="flex items-center gap-0.5 p-0.5 rounded-lg" style={{ background: S.bg, border: `1px solid ${S.border}` }}>
-          {(['Board', 'Backlog', 'Sprints', 'Timeline'] as Tab[]).map(t => (
+          {(['Board', 'Backlog', 'Sprints'] as Tab[]).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -1365,22 +1443,42 @@ export default function ProjectPage() {
         <BoardTab issues={issues} setIssues={fn => setIssues(fn)} onCreateIssue={()=>setQuickCreate({})} />
       )}
       {tab === 'Backlog' && (
-        <BacklogTab issues={issues} onCreateIssue={()=>setQuickCreate({})} onCompleteSprint={s=>setCompletingSprint(s)} />
+        <BacklogTab issues={issues} sprints={sprints} canManageSprint={canManageSprint} onCreateIssue={()=>setQuickCreate({})} onCompleteSprint={s=>setCompletingSprint(s)} />
       )}
       {tab === 'Sprints' && (
-        <SprintsTab issues={issues} />
+        <SprintsTab issues={issues} sprints={sprints} />
       )}
-      {tab === 'Timeline' && (
-        <div className="flex-1 flex items-center justify-center" style={{ color: S.t3 }}>
-          <div className="text-center">
-            <p className="text-[13px] font-medium" style={{ color: S.t2 }}>Visualização Timeline</p>
-            <p className="text-[12px] mt-1" style={{ color: S.t3 }}>Veja a aba Gantt no menu lateral para o roadmap completo.</p>
-          </div>
-        </div>
-      )}
+
     </div>
     {quickCreate !== null && <CreateIssueModal onClose={()=>setQuickCreate(null)} onCreate={()=>setQuickCreate(null)} />}
-    {completingSprint && <CompleteSprintModal sprint={completingSprint} stats={{ done: issues.filter((i: {sprint?:string;status:string})=>i.sprint===completingSprint.id&&i.status==='done').length, total: issues.filter((i: {sprint?:string})=>i.sprint===completingSprint.id).length, remaining: issues.filter((i: {sprint?:string;status:string})=>i.sprint===completingSprint.id&&i.status!=='done').length }} onClose={()=>setCompletingSprint(null)} onConfirm={()=>setCompletingSprint(null)} />}
+    {completingSprint && (() => {
+      const sprintIssues  = issues.filter(i => i.sprint === completingSprint.id)
+      const doneCount     = sprintIssues.filter(i => i.status === 'done').length
+      const totalCount    = sprintIssues.length
+      const remainCount   = sprintIssues.filter(i => i.status !== 'done').length
+      return (
+        <CompleteSprintModal
+          sprint={completingSprint}
+          stats={{ done: doneCount, total: totalCount, remaining: remainCount }}
+          nextSprintName={sprints.find(s => s.state === 'planned')?.name}
+          onClose={() => setCompletingSprint(null)}
+          onConfirm={handleCompleteSprint}
+        />
+      )
+    })()}
+    {/* Toast */}
+    {toast && (
+      <div style={{
+        position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)',
+        background: '#1a2540', border: `1px solid ${DS.accent}40`,
+        borderRadius: 10, padding: '12px 20px', zIndex: 9999,
+        boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
+        display: 'flex', alignItems: 'center', gap: 10, maxWidth: 480,
+      }}>
+        <span style={{ fontSize: 16 }}>✓</span>
+        <span style={{ fontSize: 13, color: '#e8ecf4', fontWeight: 500 }}>{toast}</span>
+      </div>
+    )}
     </>
   )
 }

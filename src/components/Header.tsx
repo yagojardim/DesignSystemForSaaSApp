@@ -1,16 +1,15 @@
 import { useState } from 'react'
 import { Avatar } from './ds/Avatar'
 import { T } from './ds/tokens'
-import type { Role } from './Sidebar'
+import { getActiveUser, setActiveUser, MOCK_USERS } from '../data/session'
 
 type View = 'home' | 'foundations' | 'dashboard' | 'project' | 'issue' | 'client' | 'task-drawer' | 'projects-list' | 'gantt' | 'calendar' | 'list' | 'timeline' | 'epics' | 'releases' | 'filters' | 'navigator' | 'reports' | 'automations' | 'config' | 'team' | 'my-tasks' | 'login' | 'role-dashboard' | 'client-access' | 'client-login'
 
 interface HeaderProps {
   onCreateIssue?: () => void
-  currentView:  View
-  onViewChange: (v: string) => void
-  role:         Role
-  onRoleChange: (r: Role) => void
+  currentView:    View
+  onViewChange:   (v: string) => void
+  onUserChange:   (userId: string) => void
 }
 
 const viewLabels: Record<View, string> = {
@@ -41,17 +40,30 @@ const viewLabels: Record<View, string> = {
   'issue':         'Issue Detail',
 }
 
-const ROLE_STYLE: Record<Role, { color: string; bg: string }> = {
-  Admin:  { color: T.accent,  bg: T.accentDim  },
-  Member: { color: T.success, bg: T.successDim },
-  Viewer: { color: T.text3,   bg: T.neutralDim },
+const ROLE_CONTEXT_LABEL: Record<string, string> = {
+  Admin: 'Admin Master', PMO: 'PMO', ProjectManager: 'Project Manager',
+  ProductManager: 'Product Manager', ProductOwner: 'Product Owner',
+  ScrumMaster: 'Scrum Master', TechLead: 'Tech Lead',
+  Dev: 'Dev', UX: 'UX / UI', QA: 'QA',
+}
+
+const ROLE_CONTEXT_COLOR: Record<string, { color: string; bg: string }> = {
+  Admin:          { color: '#a78bfa', bg: 'rgba(167,139,250,0.15)' },
+  PMO:            { color: '#7d92ff', bg: 'rgba(125,146,255,0.15)' },
+  ProjectManager: { color: T.accent,  bg: T.accentDim },
+  ProductManager: { color: '#35c9ae', bg: 'rgba(53,201,174,0.15)' },
+  ProductOwner:   { color: T.success, bg: T.successDim },
+  ScrumMaster:    { color: '#e6b23c', bg: 'rgba(230,178,60,0.15)' },
+  TechLead:       { color: '#f0805c', bg: 'rgba(240,128,92,0.15)' },
+  Dev:            { color: '#38bdf8', bg: 'rgba(56,189,248,0.15)' },
+  UX:             { color: '#f472b6', bg: 'rgba(244,114,182,0.15)' },
+  QA:             { color: '#4ade80', bg: 'rgba(74,222,128,0.15)' },
 }
 
 function today() {
   return new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-// Notification dropdown
 const NOTIFICATIONS = [
   { icon: '🔴', text: 'PM-142 bloqueado — aguardando você', time: '2h' },
   { icon: '💬', text: 'João comentou em PM-158',             time: '3h' },
@@ -59,13 +71,22 @@ const NOTIFICATIONS = [
   { icon: '⚡', text: 'Sprint 14 termina em 3 dias',         time: '1d' },
 ]
 
-export function Header({ currentView, onViewChange, role, onRoleChange, onCreateIssue }: HeaderProps) {
-  const [cmdOpen,  setCmdOpen]  = useState(false)
-  const [notifOpen, setNotifOpen] = useState(false)
-  const [roleOpen, setRoleOpen] = useState(false)
-  const [userOpen, setUserOpen] = useState(false)
-  const [readAll, setReadAll] = useState(false)
-  const rs = ROLE_STYLE[role]
+export function Header({ currentView, onViewChange, onUserChange, onCreateIssue }: HeaderProps) {
+  const [cmdOpen,    setCmdOpen]    = useState(false)
+  const [notifOpen,  setNotifOpen]  = useState(false)
+  const [switchOpen, setSwitchOpen] = useState(false)
+  const [readAll,    setReadAll]    = useState(false)
+
+  const activeUser = getActiveUser()
+  const rc         = activeUser.role_context
+  const rcStyle    = ROLE_CONTEXT_COLOR[rc] ?? { color: T.accent, bg: T.accentDim }
+  const rcLabel    = ROLE_CONTEXT_LABEL[rc] ?? rc
+
+  function handleSwitchUser(userId: string) {
+    setActiveUser(userId)
+    onUserChange(userId)
+    setSwitchOpen(false)
+  }
 
   return (
     <>
@@ -89,12 +110,7 @@ export function Header({ currentView, onViewChange, role, onRoleChange, onCreate
         <button
           onClick={() => setCmdOpen(true)}
           className="hidden md:flex items-center gap-2 h-8 px-3 rounded-lg text-[12px] transition-colors"
-          style={{
-            minWidth: 240,
-            background: T.bgSurface2,
-            border: `1px solid ${T.border}`,
-            color: T.text3,
-          }}
+          style={{ minWidth: 240, background: T.bgSurface2, border: `1px solid ${T.border}`, color: T.text3 }}
           onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = T.border2 }}
           onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = T.border }}
         >
@@ -114,7 +130,7 @@ export function Header({ currentView, onViewChange, role, onRoleChange, onCreate
             <button
               onClick={onCreateIssue}
               className="flex items-center gap-1.5 h-7 px-3 rounded-lg text-[11px] font-semibold text-white transition-all mr-2"
-              style={{ background:T.accent }}
+              style={{ background: T.accent }}
               onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.filter='brightness(1.15)'}}
               onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.filter='none'}}
             >
@@ -125,54 +141,86 @@ export function Header({ currentView, onViewChange, role, onRoleChange, onCreate
             </button>
           )}
 
-          {/* [PROTOTYPE] Role switcher */}
+          {/* Inspection User Switcher */}
           <div className="relative mr-2">
             <button
-              onClick={() => setRoleOpen(o => !o)}
+              onClick={() => setSwitchOpen(o => !o)}
               className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[11px] font-semibold transition-colors"
-              style={{ background: rs.bg, color: rs.color }}
+              style={{ background: rcStyle.bg, color: rcStyle.color, border: `1px solid ${rcStyle.color}30` }}
+              title="Trocar usuário de inspeção"
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                 <circle cx="5" cy="3.5" r="2" stroke="currentColor" strokeWidth="1.2"/>
                 <path d="M1.5 9c0-1.9 1.6-3.5 3.5-3.5s3.5 1.6 3.5 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
               </svg>
-              {role}
+              {rcLabel}
               <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
                 <path d="M1.5 3L4 5.5L6.5 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
               </svg>
             </button>
-            {roleOpen && (
+
+            {switchOpen && (
               <div
                 className="absolute right-0 top-full mt-1 z-50 py-1 rounded-xl overflow-hidden fade-rise"
-                style={{
-                  width: 140,
-                  background: T.bgSurface,
-                  border: `1px solid ${T.border2}`,
-                  boxShadow: T.shadowModal,
-                }}
+                style={{ width: 230, background: T.bgSurface, border: `1px solid ${T.border2}`, boxShadow: T.shadowModal }}
+                onMouseLeave={() => setSwitchOpen(false)}
               >
-                <p className="px-3 pb-1 text-[9px] font-semibold uppercase tracking-widest" style={{ color: T.text3 }}>Papel · protótipo</p>
-                {(['Admin', 'Member', 'Viewer'] as Role[]).map(r => {
-                  const s = ROLE_STYLE[r]
+                <p className="px-3 pb-1 pt-0.5 text-[9px] font-semibold uppercase tracking-widest" style={{ color: T.text3 }}>
+                  Inspection Mode — trocar usuário
+                </p>
+                {MOCK_USERS.map(u => {
+                  const s   = ROLE_CONTEXT_COLOR[u.role_context] ?? { color: T.accent, bg: T.accentDim }
+                  const lbl = ROLE_CONTEXT_LABEL[u.role_context] ?? u.role_context
+                  const active = u.user_id === activeUser.user_id
                   return (
                     <button
-                      key={r}
-                      onClick={() => { onRoleChange(r); setRoleOpen(false) }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-[12px] transition-colors"
-                      style={{ background: r === role ? `${s.color}12` : 'transparent', color: r === role ? s.color : T.text2 }}
-                      onMouseEnter={e => { if (r !== role) (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
-                      onMouseLeave={e => { if (r !== role) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                      key={u.user_id}
+                      onClick={() => handleSwitchUser(u.user_id)}
+                      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left transition-colors"
+                      style={{ background: active ? `${s.color}14` : 'transparent' }}
+                      onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
+                      onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
                     >
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color }} />
-                      {r}
-                      {r === role && (
-                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="ml-auto">
-                          <path d="M2 5l2.5 2.5L8 2.5" stroke={s.color} strokeWidth="1.3" strokeLinecap="round"/>
+                      <Avatar name={u.name} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12px] font-medium truncate" style={{ color: active ? s.color : T.text1 }}>{u.name}</p>
+                        <p className="text-[10px]" style={{ color: T.text3 }}>{lbl}</p>
+                      </div>
+                      {active && (
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="flex-shrink-0">
+                          <path d="M2 5l2.5 2.5L8 2.5" stroke={s.color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
                       )}
                     </button>
                   )
                 })}
+
+                {/* Separator + profile actions */}
+                <div className="mx-3 my-1" style={{ height: 1, background: T.border }} />
+                <div className="px-3 py-1.5" style={{ borderBottom: `1px solid ${T.border}` }}>
+                  <p className="text-[12px] font-semibold truncate" style={{ color: T.text1 }}>{activeUser.name}</p>
+                  <p className="text-[10px] truncate" style={{ color: T.text3 }}>{activeUser.email}</p>
+                  <span className="inline-block mt-1 text-[9px] font-bold px-1.5 py-px rounded-full" style={{ color: rcStyle.color, background: rcStyle.bg }}>
+                    {rcLabel}
+                  </span>
+                </div>
+                {[
+                  { icon: '👤', label: 'Perfil' },
+                  { icon: '⚙️', label: 'Preferências' },
+                  { icon: '🔑', label: 'Segurança' },
+                  { icon: '🚪', label: 'Sair' },
+                ].map(item => (
+                  <button
+                    key={item.label}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] transition-colors text-left"
+                    style={{ color: item.label === 'Sair' ? T.crit : T.text2 }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                    onClick={() => setSwitchOpen(false)}
+                  >
+                    <span>{item.icon}</span>{item.label}
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -197,20 +245,13 @@ export function Header({ currentView, onViewChange, role, onRoleChange, onCreate
                 <path d="M8 1.5A4.5 4.5 0 0 0 3.5 6v3l-1 1.5h11L12.5 9V6A4.5 4.5 0 0 0 8 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
                 <path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" strokeWidth="1.3" />
               </svg>
-              {/* Unread dot */}
               <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full" style={{ background: T.crit }} />
             </button>
 
             {notifOpen && (
               <div
                 className="absolute right-0 top-full mt-1 z-50 py-1.5 fade-rise"
-                style={{
-                  width: 300,
-                  background: T.bgSurface,
-                  border: `1px solid ${T.border2}`,
-                  borderRadius: 12,
-                  boxShadow: T.shadowModal,
-                }}
+                style={{ width: 300, background: T.bgSurface, border: `1px solid ${T.border2}`, borderRadius: 12, boxShadow: T.shadowModal }}
               >
                 <div className="flex items-center justify-between px-3 pb-1.5" style={{ borderBottom: `1px solid ${T.border}` }}>
                   <p className="text-[12px] font-semibold" style={{ color: T.text1 }}>Notificações</p>
@@ -235,42 +276,6 @@ export function Header({ currentView, onViewChange, role, onRoleChange, onCreate
             )}
           </div>
 
-          {/* User avatar + dropdown */}
-          <div className="relative ml-1">
-            <button
-              onClick={() => setUserOpen(o => !o)}
-              className="flex items-center gap-2 rounded-lg px-1.5 py-1 transition-colors"
-              style={{ background: userOpen ? T.bgSurface2 : 'transparent' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
-              onMouseLeave={e => { if (!userOpen) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
-            >
-              <Avatar name="Ana Lima" size="sm" presence="online" />
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ color: T.text3 }}>
-                <path d="M2.5 4L5 6.5L7.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            {userOpen && (
-              <div
-                className="absolute right-0 top-full mt-1 z-50 py-1 rounded-xl fade-rise"
-                style={{ width: 180, background: T.bgSurface, border: `1px solid ${T.border2}`, boxShadow: T.shadowModal }}
-                onMouseLeave={() => setUserOpen(false)}
-              >
-                <div className="px-3 py-2" style={{ borderBottom: `1px solid ${T.border}` }}>
-                  <p className="text-[13px] font-semibold" style={{ color: T.text1 }}>Ana Lima</p>
-                  <p className="text-[11px]" style={{ color: T.text3 }}>ana@altech.io</p>
-                </div>
-                {[{icon:'👤',label:'Perfil'},{icon:'⚙️',label:'Preferências'},{icon:'🔑',label:'Segurança'},{icon:'🚪',label:'Sair'}].map(item => (
-                  <button key={item.label} className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] transition-colors text-left"
-                    style={{ color: item.label==='Sair' ? T.crit : T.text2 }}
-                    onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background=T.bgSurface2}}
-                    onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background='transparent'}}
-                    onClick={()=>setUserOpen(false)}>
-                    <span>{item.icon}</span>{item.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
       </header>
 
