@@ -30,6 +30,23 @@ const INITIAL_DATA: WorkItemData = {
     { id:'EP-02', label:'Infra & Eng',         color:'#F59E0B' },
     { id:'EP-03', label:'Pesquisa & Conteúdo', color:'#A78BFA' },
   ],
+  availableMembers: [
+    { id:'JN', initials:'JN', name:'Julia Neves'     },
+    { id:'AL', initials:'AL', name:'Ana Lima'        },
+    { id:'NM', initials:'NM', name:'Natalia Moura'   },
+    { id:'CS', initials:'CS', name:'Carlos Silva'    },
+    { id:'RM', initials:'RM', name:'Rafael Mendes'   },
+    { id:'LF', initials:'LF', name:'Lucas Ferreira'  },
+  ],
+  availableSprints: [
+    { id:'s13', name:'Sprint 13' },
+    { id:'s14', name:'Sprint 14' },
+    { id:'s15', name:'Sprint 15' },
+  ],
+  availableLabels:   ['Design','Web','Research','Content','Mobile','Eng','UX','SEO','Brand'],
+  availableVersions: ['v2.4.0','v2.4.1','v2.5.0'],
+  sprintId:         's14',
+  history:          [],
   createdAt:        '10 abr 2025',
   updatedAt:        '15 abr 2025',
   acItems: [

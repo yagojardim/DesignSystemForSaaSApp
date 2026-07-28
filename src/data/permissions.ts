@@ -38,6 +38,8 @@ export type Capability =
   | 'board:manage'
   | 'accept:functional'
   | 'signoff:qa'
+  // Work item editing
+  | 'edit:workitem'
   // Org
   | 'project:create'
   | 'users:manage'
@@ -147,6 +149,11 @@ export const PERMISSION_MATRIX: Record<Capability, CapabilityRule> = {
     default: ['Admin','PMO'],
     optIn:   ['ProjectManager'],
     hidden:  ['ProductManager','ProductOwner','ScrumMaster','TechLead','Dev','QA','UX'],
+  },
+  'edit:workitem': {
+    default: ['Admin','PMO','ProjectManager','ProductManager','ProductOwner','ScrumMaster','TechLead','Dev','QA','UX'],
+    optIn:   [],
+    hidden:  [],
   },
 }
 

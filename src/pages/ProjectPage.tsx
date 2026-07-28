@@ -47,6 +47,8 @@ interface Issue {
   is_regression?:              boolean
   open_dependency?:            boolean
   comments?:                   IssueComment[]
+  fix_versions?:               string[]
+  history?:                    import('../components/WorkItemDetail').WIHistoryEntry[]
 }
 
 interface SprintDef {
@@ -617,6 +619,7 @@ function issueToWID(issue: Issue): WorkItemData {
     epicKey:          issue.epic,
     epicLabel:        epic?.label,
     epicColor:        epic?.color,
+    sprintId:         issue.sprint,
     sprintName:       sprint?.name,
     blocked:          issue.blocked,
     blockedReason:    issue.blocked_reason,
@@ -625,8 +628,13 @@ function issueToWID(issue: Issue): WorkItemData {
     description:      issue.description,
     dueDate:          issue.dueDate,
     points:           issue.points,
-    fixVersions:      [],
+    fixVersions:      issue.fix_versions ?? [],
     availableEpics:   EPICS.map(e => ({ id: e.id, label: e.label, color: e.color })),
+    availableMembers: Object.entries(NAMES).map(([initials, name]) => ({ id: initials, initials, name })),
+    availableSprints: SPRINTS.map(s => ({ id: s.id, name: s.name })),
+    availableLabels:  ['Design','Web','Research','Content','Mobile','Eng','UX','SEO','Brand','Hero'],
+    availableVersions:['v2.3.0','v2.4.0','v2.4.1','v2.5.0'],
+    history:          issue.history ?? [],
     acItems:          issue.acceptance_criteria_count
       ? Array.from({ length: issue.acceptance_criteria_count }, (_, i) => ({ id:`ac-${i}`, text:`Critério de aceite ${i+1}`, done: i === 0 }))
       : [],
@@ -646,10 +654,17 @@ function widToIssue(issue: Issue, updated: WorkItemData): Issue {
     priority:                  updated.priority as Priority,
     labels:                    updated.labels,
     assignee:                  updated.assigneeInitials,
+    reporter:                  updated.reporterInitials,
+    sprint:                    updated.sprintId,
+    points:                    updated.points,
+    dueDate:                   updated.dueDate,
+    fix_versions:              updated.fixVersions,
     blocked:                   updated.blocked,
     blocked_reason:            updated.blockedReason,
+    severity:                  updated.severity as Issue['severity'],
     description:               updated.description,
     epic:                      updated.epicKey,
+    history:                   updated.history,
     comments:                  (updated.comments ?? []).map(c => ({ author: c.author, text: c.body, when: c.time })),
     acceptance_criteria_count: updated.acItems?.length,
   }

@@ -5,10 +5,13 @@ import { useSession } from '../data/SessionContext'
 import { can } from '../data/permissions'
 
 // ─── Exported data interfaces ──────────────────────────────────────────────────
-export interface WIComment  { author: string; authorName?: string; body: string; time: string }
-export interface WILinkedIssue { relType: string; key: string; title: string; status: string; priority: string; assigneeInitials?: string }
-export interface WIChild    { key: string; title: string; type: string; status: string; assigneeInitials?: string }
-export interface WIAcItem   { id: string; text: string; done: boolean }
+export interface WIComment      { author: string; authorName?: string; body: string; time: string }
+export interface WILinkedIssue  { relType: string; key: string; title: string; status: string; priority: string; assigneeInitials?: string }
+export interface WIChild        { key: string; title: string; type: string; status: string; assigneeInitials?: string }
+export interface WIAcItem       { id: string; text: string; done: boolean }
+export interface WIMember       { id: string; name: string; initials: string }
+export interface WISprint       { id: string; name: string }
+export interface WIHistoryEntry { authorInitials: string; authorName: string; field: string; from: string; to: string; time: string }
 
 export interface WorkItemData {
   key:               string
@@ -24,7 +27,7 @@ export interface WorkItemData {
   epicKey?:          string
   epicLabel?:        string
   epicColor?:        string
-  availableEpics?:   { id: string; label: string; color: string }[]
+  sprintId?:         string
   sprintName?:       string
   blocked?:          boolean
   blockedReason?:    string
@@ -38,11 +41,18 @@ export interface WorkItemData {
   children?:         WIChild[]
   linkedIssues?:     WILinkedIssue[]
   comments?:         WIComment[]
+  history?:          WIHistoryEntry[]
   createdAt?:        string
   updatedAt?:        string
   evidenceCount?:    number
   attachmentCount?:  number
   parentId?:         string
+  // Catalogues passed from project context
+  availableEpics?:    { id: string; label: string; color: string }[]
+  availableMembers?:  WIMember[]
+  availableSprints?:  WISprint[]
+  availableLabels?:   string[]
+  availableVersions?: string[]
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -212,6 +222,291 @@ function InlineSelect({ value, options, onChange, getLabel, getColor }: {
   )
 }
 
+// ─── Member selector (Assignee / Reporter) ───────────────────────────────────
+function MemberSelector({ value, members, onChange, allowNone }: {
+  value?:     string  // initials
+  members:    WIMember[]
+  onChange:   (m: WIMember | null) => void
+  allowNone?: boolean
+}) {
+  const [open,  setOpen]  = useState(false)
+  const [query, setQuery] = useState('')
+  const [hi,    setHi]    = useState(-1)
+  const ref      = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const AV_COLORS: Record<string, string> = {
+    AL:T.accent, NM:T.purple, JN:T.warn, CS:T.success, RM:T.crit, LF:'#f97316',
+  }
+  const selected = members.find(m => m.initials === value)
+
+  const filtered = [
+    ...(allowNone ? [{ id:'__none__', name:'Nenhum / Remover', initials:'' }] : []),
+    ...members.filter(m => m.name.toLowerCase().includes(query.toLowerCase()) || m.initials.toLowerCase().includes(query.toLowerCase())),
+  ]
+
+  useEffect(() => {
+    if (!open) return
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setQuery('') }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  useEffect(() => {
+    if (open) { const t = setTimeout(() => inputRef.current?.focus(), 30); return () => clearTimeout(t) }
+    else { setQuery(''); setHi(-1) }
+  }, [open])
+
+  function handleKey(e: React.KeyboardEvent) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHi(h => Math.min(h+1, filtered.length-1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHi(h => Math.max(h-1, 0)) }
+    else if (e.key === 'Enter' && hi >= 0) { e.preventDefault(); select(filtered[hi]) }
+    else if (e.key === 'Escape') { setOpen(false) }
+  }
+
+  function select(m: { id: string; name: string; initials: string }) {
+    onChange(m.id === '__none__' ? null : { id: m.id, name: m.name, initials: m.initials })
+    setOpen(false); setQuery(''); setHi(-1)
+  }
+
+  return (
+    <div ref={ref} style={{ position:'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, padding:'2px 6px', borderRadius:6, border:'none', background:'transparent', color:T.text1, cursor:'pointer', fontFamily:'inherit' }}
+        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
+        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+      >
+        {selected
+          ? <><span style={{ width:18, height:18, borderRadius:'50%', background:AV_COLORS[selected.initials]??T.text3, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:7, fontWeight:700, color:'white', flexShrink:0 }}>{selected.initials}</span>{selected.name}</>
+          : <span style={{ color:T.text3, fontStyle:'italic' }}>Nenhum</span>}
+        <span style={{ opacity:0.45, fontSize:9, color:T.text3 }}>▾</span>
+      </button>
+      {open && (
+        <div onKeyDown={handleKey} style={{ position:'absolute', top:'calc(100% + 4px)', left:0, zIndex:300, width:220, background:T.bgSurface, border:`1px solid ${T.border2}`, borderRadius:12, boxShadow:T.shadowModal, overflow:'hidden' }}>
+          <div style={{ padding:'8px 10px', borderBottom:`1px solid ${T.border}` }}>
+            <input ref={inputRef} value={query} onChange={e => { setQuery(e.target.value); setHi(-1) }}
+              placeholder="Buscar membro…"
+              style={{ width:'100%', background:T.bgSurface2, border:`1px solid ${T.border}`, borderRadius:8, padding:'5px 10px', color:T.text1, fontSize:12, outline:'none', fontFamily:'inherit', boxSizing:'border-box' }}
+              onFocus={e => { e.currentTarget.style.borderColor = T.accent }}
+              onBlur={e => { e.currentTarget.style.borderColor = T.border }} />
+          </div>
+          <div style={{ maxHeight:200, overflowY:'auto', padding:'4px 0' }}>
+            {filtered.map((m, i) => {
+              const isCur = m.initials === (value ?? '')
+              return (
+                <button key={m.id} onClick={() => select(m)} onMouseEnter={() => setHi(i)}
+                  style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:8, padding:'7px 12px', border:'none', cursor:'pointer', fontSize:12, fontFamily:'inherit', fontWeight:isCur?700:400, background:i===hi?T.bgSurface2:'transparent', color:T.text1 }}>
+                  {m.initials
+                    ? <span style={{ width:20, height:20, borderRadius:'50%', background:AV_COLORS[m.initials]??T.text3, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:8, fontWeight:700, color:'white', flexShrink:0 }}>{m.initials}</span>
+                    : <span style={{ width:20, height:20, borderRadius:'50%', background:T.bgSurface2, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:12, flexShrink:0, color:T.text3 }}>—</span>}
+                  <span style={{ flex:1 }}>{m.name}</span>
+                  {isCur && m.initials && <span style={{ fontSize:10, color:T.accent }}>✓</span>}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Label editor (multi-select chips) ────────────────────────────────────────
+function LabelEditor({ selected, available, onChange }: {
+  selected:  string[]
+  available: string[]
+  onChange:  (labels: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const LABEL_COLOR: Record<string, string> = {
+    Design:'#3B82F6', Web:'#9898AD', Research:'#A78BFA', Content:'#F59E0B',
+    Hero:'#9898AD', Mobile:'#38bdf8', Eng:'#10B981', UX:'#14b8a6', SEO:'#EF4444', Brand:'#A78BFA',
+  }
+  const LABEL_BG: Record<string, string> = {
+    Design:'rgba(59,130,246,0.12)', Web:'rgba(92,92,122,0.12)', Research:'rgba(167,139,250,0.12)',
+    Content:'rgba(245,158,11,0.12)', Hero:'rgba(92,92,122,0.12)', Mobile:'rgba(56,189,248,0.12)',
+    Eng:'rgba(16,185,129,0.12)', UX:'rgba(20,184,166,0.12)', SEO:'rgba(239,68,68,0.12)', Brand:'rgba(167,139,250,0.12)',
+  }
+
+  useEffect(() => {
+    if (!open) return
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  function toggle(label: string) {
+    onChange(selected.includes(label) ? selected.filter(l => l !== label) : [...selected, label])
+  }
+
+  return (
+    <div ref={ref} style={{ position:'relative' }}>
+      <div style={{ display:'flex', flexWrap:'wrap', gap:4, alignItems:'center' }}>
+        {selected.map(l => (
+          <span key={l} style={{ display:'inline-flex', alignItems:'center', gap:3, fontSize:10, fontWeight:600, padding:'2px 6px', borderRadius:20, background:LABEL_BG[l]??T.neutralDim, color:LABEL_COLOR[l]??T.text2, border:`1px solid ${(LABEL_COLOR[l]??T.text3)}30` }}>
+            {l}
+            <button onClick={() => toggle(l)} style={{ border:'none', background:'transparent', color:'inherit', cursor:'pointer', padding:0, lineHeight:1, fontSize:12 }}>×</button>
+          </span>
+        ))}
+        <button onClick={() => setOpen(o => !o)}
+          style={{ fontSize:11, padding:'2px 7px', borderRadius:20, border:`1px dashed ${T.border}`, background:'transparent', color:T.text3, cursor:'pointer' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor=T.accent; (e.currentTarget as HTMLButtonElement).style.color=T.accent }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor=T.border;  (e.currentTarget as HTMLButtonElement).style.color=T.text3 }}>
+          + Label
+        </button>
+      </div>
+      {open && (
+        <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, zIndex:300, width:180, background:T.bgSurface, border:`1px solid ${T.border2}`, borderRadius:12, boxShadow:T.shadowModal, padding:'4px 0', overflow:'hidden' }}>
+          {available.map(l => (
+            <button key={l} onClick={() => toggle(l)}
+              style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:8, padding:'6px 12px', border:'none', cursor:'pointer', fontSize:12, fontFamily:'inherit', background:'transparent', color:LABEL_COLOR[l]??T.text2 }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}>
+              <span style={{ width:14, height:14, borderRadius:3, border:`1.5px solid ${(LABEL_COLOR[l]??T.text3)}60`, background:selected.includes(l)?LABEL_BG[l]??T.neutralDim:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center' }}>
+                {selected.includes(l) && <span style={{ fontSize:9, color:LABEL_COLOR[l]??T.text2 }}>✓</span>}
+              </span>
+              {l}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Generic searchable selector (sprints, versions) ─────────────────────────
+function SearchableSelect({ value, options, onChange, placeholder = 'Buscar…', noneLabel = 'Nenhum' }: {
+  value?:      string
+  options:     { id: string; label: string }[]
+  onChange:    (id: string | null) => void
+  placeholder?: string
+  noneLabel?:   string
+}) {
+  const [open,  setOpen]  = useState(false)
+  const [query, setQuery] = useState('')
+  const [hi,    setHi]    = useState(-1)
+  const ref      = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const selected = options.find(o => o.id === value)
+  const filtered = [
+    { id: null as string | null, label: `— ${noneLabel}` },
+    ...options.filter(o => o.label.toLowerCase().includes(query.toLowerCase())).map(o => ({ ...o, id: o.id as string | null })),
+  ]
+
+  useEffect(() => {
+    if (!open) return
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setQuery('') }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  useEffect(() => {
+    if (open) { const t = setTimeout(() => inputRef.current?.focus(), 30); return () => clearTimeout(t) }
+    else { setQuery(''); setHi(-1) }
+  }, [open])
+
+  function handleKey(e: React.KeyboardEvent) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHi(h => Math.min(h+1, filtered.length-1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHi(h => Math.max(h-1, 0)) }
+    else if (e.key === 'Enter' && hi >= 0) { e.preventDefault(); select(filtered[hi].id) }
+    else if (e.key === 'Escape') { setOpen(false) }
+  }
+
+  function select(id: string | null) { onChange(id); setOpen(false); setQuery(''); setHi(-1) }
+
+  return (
+    <div ref={ref} style={{ position:'relative' }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, padding:'2px 6px', borderRadius:6, border:'none', background:'transparent', color:T.text1, cursor:'pointer', fontFamily:'inherit' }}
+        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
+        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}>
+        {selected ? selected.label : <span style={{ color:T.text3, fontStyle:'italic' }}>{noneLabel}</span>}
+        <span style={{ opacity:0.45, fontSize:9, color:T.text3 }}>▾</span>
+      </button>
+      {open && (
+        <div onKeyDown={handleKey} style={{ position:'absolute', top:'calc(100% + 4px)', left:0, zIndex:300, width:220, background:T.bgSurface, border:`1px solid ${T.border2}`, borderRadius:12, boxShadow:T.shadowModal, overflow:'hidden' }}>
+          <div style={{ padding:'8px 10px', borderBottom:`1px solid ${T.border}` }}>
+            <input ref={inputRef} value={query} onChange={e => { setQuery(e.target.value); setHi(-1) }}
+              placeholder={placeholder}
+              style={{ width:'100%', background:T.bgSurface2, border:`1px solid ${T.border}`, borderRadius:8, padding:'5px 10px', color:T.text1, fontSize:12, outline:'none', fontFamily:'inherit', boxSizing:'border-box' }}
+              onFocus={e => { e.currentTarget.style.borderColor = T.accent }}
+              onBlur={e => { e.currentTarget.style.borderColor = T.border }} />
+          </div>
+          <div style={{ maxHeight:200, overflowY:'auto', padding:'4px 0' }}>
+            {filtered.map((o, i) => (
+              <button key={o.id ?? '__none__'} onClick={() => select(o.id)} onMouseEnter={() => setHi(i)}
+                style={{ width:'100%', textAlign:'left', padding:'7px 12px', border:'none', cursor:'pointer', fontSize:12, fontFamily:'inherit', fontWeight:o.id===value?700:400, background:i===hi?T.bgSurface2:'transparent', color:o.id===null?T.text3:T.text1, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                {o.label}
+                {o.id === value && <span style={{ fontSize:10, color:T.accent }}>✓</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Inline number edit ───────────────────────────────────────────────────────
+function InlineNumber({ value, onChange }: { value?: number; onChange: (v: number | undefined) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [draft,   setDraft]   = useState(String(value ?? ''))
+
+  function commit() {
+    const n = draft === '' ? undefined : Math.max(0, parseInt(draft, 10) || 0)
+    onChange(n); setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <input autoFocus type="number" min={0} value={draft} onChange={e => setDraft(e.target.value)}
+        onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false) }}
+        style={{ width:60, height:24, padding:'0 6px', borderRadius:6, border:`1px solid ${T.accent}`, background:T.bgSurface2, color:T.text1, fontSize:12, outline:'none', fontFamily:'inherit' }} />
+    )
+  }
+  return (
+    <button onClick={() => { setDraft(String(value ?? '')); setEditing(true) }}
+      style={{ fontSize:12, padding:'2px 6px', borderRadius:6, border:'none', background:'transparent', color:T.text1, cursor:'pointer', fontFamily:'inherit' }}
+      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
+      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}>
+      {value != null && value > 0 ? `${value} pt` : <span style={{ color:T.text3, fontStyle:'italic' }}>—</span>}
+    </button>
+  )
+}
+
+// ─── Inline date edit ─────────────────────────────────────────────────────────
+function InlineDate({ value, onChange, delayed }: { value?: string; onChange: (v: string) => void; delayed?: boolean }) {
+  const [editing, setEditing] = useState(false)
+  const [draft,   setDraft]   = useState('')
+
+  function commit() { if (draft) onChange(draft); setEditing(false) }
+
+  if (editing) {
+    return (
+      <input autoFocus type="date" value={draft} onChange={e => setDraft(e.target.value)}
+        onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false) }}
+        style={{ height:24, padding:'0 6px', borderRadius:6, border:`1px solid ${T.accent}`, background:T.bgSurface2, color:T.text1, fontSize:12, outline:'none', fontFamily:'inherit', colorScheme:'dark' }} />
+    )
+  }
+  return (
+    <button onClick={() => { setDraft(''); setEditing(true) }}
+      style={{ fontSize:12, padding:'2px 6px', borderRadius:6, border:'none', background:'transparent', color:delayed?T.warn:T.text1, cursor:'pointer', fontFamily:'inherit' }}
+      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
+      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}>
+      {value || <span style={{ color:T.text3, fontStyle:'italic' }}>—</span>}
+    </button>
+  )
+}
+
 // ─── Epic selector ────────────────────────────────────────────────────────────
 function EpicSelector({ value, epics, onChange }: {
   value?:  string
@@ -360,7 +655,7 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
   mode?:     'drawer' | 'page'
 }) {
   const { activeUser } = useSession()
-  const canEdit = can(activeUser.permissions, 'board:manage')
+  const canEdit = can(activeUser.permissions, 'edit:workitem')
 
   // ── Local state (all mutable fields) ────────────────────────────────────────
   const [local,       setLocal]      = useState<WorkItemData>(data)
@@ -376,6 +671,7 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
   const [linkedIssues,setLinkedIssues]=useState<WILinkedIssue[]>(data.linkedIssues ?? [])
   const [loading,     setLoading]    = useState(mode === 'drawer')
   const [toast,       setToast]      = useState<string | null>(null)
+  const [history,     setHistory]    = useState<WIHistoryEntry[]>(data.history ?? [])
 
   useEffect(() => {
     if (mode === 'drawer') {
@@ -443,15 +739,32 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
     setTimeout(() => setToast(null), 2500)
   }
 
+  function trackChange(field: string, from: string, to: string, patch: Partial<WorkItemData>) {
+    const initials = activeUser.name.split(' ').slice(0, 2).map((p: string) => p[0]).join('')
+    const entry: WIHistoryEntry = {
+      authorInitials: initials,
+      authorName:     activeUser.name,
+      field, from, to,
+      time: new Date().toLocaleString('pt-BR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }),
+    }
+    const nextHistory = [entry, ...history]
+    setHistory(nextHistory)
+    update({ ...patch, history: nextHistory, updatedAt: 'agora' })
+    showToast(`${field} atualizado`)
+  }
+
   function handleEpicChange(id: string | null) {
     const epic = (data.availableEpics ?? []).find(e => e.id === id)
-    update({ epicKey: id ?? undefined, epicLabel: epic?.label, epicColor: epic?.color })
-    showToast('Épico atualizado')
+    const from = local.epicLabel ?? 'Nenhum'
+    const to   = epic?.label ?? 'Nenhum'
+    trackChange('Épico', from, to, { epicKey: id ?? undefined, epicLabel: epic?.label, epicColor: epic?.color })
   }
 
   function handleAssignToMe() {
     const initials = activeUser.name.split(' ').slice(0,2).map((p: string)=>p[0]).join('')
-    update({ assigneeInitials: initials, assigneeName: activeUser.name })
+    const from = (local.assigneeName ?? local.assigneeInitials) || 'Nenhum'
+    const to   = activeUser.name
+    trackChange('Responsável', from, to, { assigneeInitials: initials, assigneeName: activeUser.name })
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────────
@@ -733,10 +1046,28 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
                 </section>
               )}
 
-              {/* Comments */}
+              {/* Activity: history + comments */}
               <section style={{ marginBottom:22 }}>
                 <SecHeader title="Atividade" />
-                <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                  {/* History entries — most recent first */}
+                  {history.map((h, i) => (
+                    <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:8, padding:'7px 10px', borderRadius:8, background:T.bgSurface2, border:`1px solid ${T.border}` }}>
+                      <span style={{ width:22, height:22, borderRadius:'50%', background:T.neutralDim, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:8, fontWeight:700, color:T.text3, flexShrink:0, marginTop:1 }}>{h.authorInitials}</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <span style={{ fontSize:11, color:T.text2 }}>
+                          <span style={{ fontWeight:600, color:T.text1 }}>{h.authorName}</span>
+                          {' alterou '}<span style={{ color:T.accent }}>{h.field}</span>
+                          {': '}
+                          <span style={{ color:T.text3, textDecoration:'line-through' }}>{h.from}</span>
+                          {' → '}
+                          <span style={{ color:T.success }}>{h.to}</span>
+                        </span>
+                        <span style={{ display:'block', fontSize:10, color:T.text3, marginTop:2 }}>{h.time}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {/* Comments */}
                   {comments.map((c,i) => (
                     <div key={i} style={{ display:'flex', gap:10 }}>
                       <Av i={c.author} size={28} />
@@ -773,28 +1104,53 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
 
               {/* Assignee */}
               <DetailRow label="Responsável">
-                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                  {local.assigneeInitials ? <Av i={local.assigneeInitials} size={20} /> : null}
-                  <span style={{ fontSize:12, color:T.text1 }}>{(local.assigneeName ?? local.assigneeInitials) || '—'}</span>
-                </div>
-                {canEdit && (
-                  <button onClick={handleAssignToMe}
-                    style={{ marginTop:4, fontSize:10, color:T.accent, border:'none', background:'transparent', cursor:'pointer', padding:0, fontFamily:'inherit' }}
-                    onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.textDecoration='underline'}}
-                    onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.textDecoration='none'}}>Atribuir a mim</button>
+                {canEdit && (data.availableMembers?.length ?? 0) > 0 ? (
+                  <div>
+                    <MemberSelector
+                      value={local.assigneeInitials}
+                      members={data.availableMembers!}
+                      allowNone
+                      onChange={m => {
+                        const from = (local.assigneeName ?? local.assigneeInitials) || 'Nenhum'
+                        const to   = m ? m.name : 'Nenhum'
+                        trackChange('Responsável', from, to, { assigneeInitials: m?.initials ?? '', assigneeName: m?.name })
+                      }}
+                    />
+                    <button onClick={handleAssignToMe}
+                      style={{ marginTop:4, fontSize:10, color:T.accent, border:'none', background:'transparent', cursor:'pointer', padding:0, fontFamily:'inherit' }}
+                      onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.textDecoration='underline'}}
+                      onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.textDecoration='none'}}>Atribuir a mim</button>
+                  </div>
+                ) : (
+                  <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                    {local.assigneeInitials ? <Av i={local.assigneeInitials} size={20} /> : null}
+                    <span style={{ fontSize:12, color:T.text1 }}>{(local.assigneeName ?? local.assigneeInitials) || '—'}</span>
+                  </div>
                 )}
               </DetailRow>
 
               {/* Labels */}
-              {local.labels.length > 0 && (
-                <DetailRow label="Labels">
+              <DetailRow label="Labels">
+                {canEdit && (data.availableLabels?.length ?? 0) > 0 ? (
+                  <LabelEditor
+                    selected={local.labels}
+                    available={data.availableLabels!}
+                    onChange={labels => {
+                      const from = local.labels.join(', ') || 'Nenhum'
+                      const to   = labels.join(', ') || 'Nenhum'
+                      trackChange('Labels', from, to, { labels })
+                    }}
+                  />
+                ) : local.labels.length > 0 ? (
                   <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
                     {local.labels.map(l => (
                       <span key={l} style={{ fontSize:10, padding:'2px 8px', borderRadius:20, background:T.indigoDim, color:T.indigo, border:`1px solid ${T.indigo}30` }}>{l}</span>
                     ))}
                   </div>
-                </DetailRow>
-              )}
+                ) : (
+                  <span style={{ fontSize:11, color:T.text3, fontStyle:'italic' }}>—</span>
+                )}
+              </DetailRow>
 
               {/* Priority */}
               <DetailRow label="Prioridade">
@@ -802,7 +1158,11 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
                   <InlineSelect
                     value={local.priority}
                     options={PRIORITIES}
-                    onChange={v=>update({ priority: v })}
+                    onChange={v => {
+                      const from = PRIORITY_LABEL[local.priority] ?? local.priority
+                      const to   = PRIORITY_LABEL[v] ?? v
+                      trackChange('Prioridade', from, to, { priority: v })
+                    }}
                     getLabel={v=>PRIORITY_LABEL[v]}
                     getColor={v=>PRIORITY_COLOR[v]}
                   />
@@ -813,7 +1173,19 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
 
               {/* Fix versions */}
               <DetailRow label="Fix versions">
-                {(local.fixVersions?.length ?? 0) > 0 ? (
+                {canEdit && (data.availableVersions?.length ?? 0) > 0 ? (
+                  <SearchableSelect
+                    value={local.fixVersions?.[0]}
+                    options={(data.availableVersions ?? []).map(v => ({ id:v, label:v }))}
+                    onChange={id => {
+                      const from = local.fixVersions?.join(', ') || 'Nenhuma'
+                      const to   = id ?? 'Nenhuma'
+                      trackChange('Fix version', from, to, { fixVersions: id ? [id] : [] })
+                    }}
+                    placeholder="Buscar versão…"
+                    noneLabel="Nenhuma versão"
+                  />
+                ) : (local.fixVersions?.length ?? 0) > 0 ? (
                   <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
                     {local.fixVersions!.map(v=>(
                       <span key={v} style={{ fontSize:10, padding:'2px 8px', borderRadius:20, background:T.successDim, color:T.success, border:`1px solid ${T.success}30` }}>{v}</span>
@@ -825,35 +1197,77 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
               </DetailRow>
 
               {/* Reporter */}
-              {(local.reporterInitials || local.reporterName) && (
-                <DetailRow label="Relator">
+              <DetailRow label="Relator">
+                {canEdit && (data.availableMembers?.length ?? 0) > 0 ? (
+                  <MemberSelector
+                    value={local.reporterInitials}
+                    members={data.availableMembers!}
+                    allowNone
+                    onChange={m => {
+                      const from = local.reporterName ?? local.reporterInitials ?? 'Nenhum'
+                      const to   = m ? m.name : 'Nenhum'
+                      trackChange('Relator', from, to, { reporterInitials: m?.initials, reporterName: m?.name })
+                    }}
+                  />
+                ) : (
                   <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                     {local.reporterInitials && <Av i={local.reporterInitials} size={18} />}
-                    <span style={{ fontSize:12 }}>{local.reporterName ?? local.reporterInitials}</span>
+                    <span style={{ fontSize:12 }}>{local.reporterName ?? local.reporterInitials ?? '—'}</span>
                   </div>
-                </DetailRow>
-              )}
+                )}
+              </DetailRow>
 
               {/* Points */}
-              {local.points != null && (
-                <DetailRow label="Story pts">
-                  <span style={{ fontSize:12 }}>{local.points > 0 ? `${local.points} pt` : '—'}</span>
-                </DetailRow>
-              )}
+              <DetailRow label="Story pts">
+                {canEdit ? (
+                  <InlineNumber
+                    value={local.points}
+                    onChange={n => {
+                      const from = local.points != null ? `${local.points} pt` : '—'
+                      const to   = n != null ? `${n} pt` : '—'
+                      trackChange('Story pts', from, to, { points: n })
+                    }}
+                  />
+                ) : (
+                  <span style={{ fontSize:12 }}>{(local.points ?? 0) > 0 ? `${local.points} pt` : '—'}</span>
+                )}
+              </DetailRow>
 
               {/* Due date */}
-              {local.dueDate && (
-                <DetailRow label="Prazo">
-                  <span style={{ fontSize:12, color:local.delayed?T.warn:T.text1 }}>{local.dueDate}</span>
-                </DetailRow>
-              )}
+              <DetailRow label="Prazo">
+                {canEdit ? (
+                  <InlineDate
+                    value={local.dueDate}
+                    delayed={local.delayed}
+                    onChange={d => {
+                      const from = local.dueDate ?? '—'
+                      trackChange('Prazo', from, d, { dueDate: d })
+                    }}
+                  />
+                ) : (
+                  <span style={{ fontSize:12, color:local.delayed?T.warn:T.text1 }}>{local.dueDate ?? '—'}</span>
+                )}
+              </DetailRow>
 
               {/* Sprint */}
-              {local.sprintName && (
-                <DetailRow label="Sprint">
-                  <span style={{ fontSize:12 }}>{local.sprintName}</span>
-                </DetailRow>
-              )}
+              <DetailRow label="Sprint">
+                {canEdit && (data.availableSprints?.length ?? 0) > 0 ? (
+                  <SearchableSelect
+                    value={local.sprintId}
+                    options={(data.availableSprints ?? []).map(s => ({ id:s.id, label:s.name }))}
+                    onChange={id => {
+                      const sprint = (data.availableSprints ?? []).find(s => s.id === id)
+                      const from   = local.sprintName ?? 'Backlog'
+                      const to     = sprint?.name ?? 'Backlog'
+                      trackChange('Sprint', from, to, { sprintId: id ?? undefined, sprintName: sprint?.name })
+                    }}
+                    placeholder="Buscar sprint…"
+                    noneLabel="Backlog"
+                  />
+                ) : (
+                  <span style={{ fontSize:12 }}>{local.sprintName ?? '—'}</span>
+                )}
+              </DetailRow>
 
               {/* Epic */}
               {((data.availableEpics?.length ?? 0) > 0 || local.epicLabel) && (
@@ -873,11 +1287,24 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
               )}
 
               {/* Bug severity */}
-              {local.type === 'bug' && local.severity && (
+              {local.type === 'bug' && (
                 <DetailRow label="Severidade">
-                  <span style={{ fontSize:12, fontWeight:600, color:local.severity==='critical'?T.crit:local.severity==='high'?T.warn:T.accent }}>
-                    {local.severity.charAt(0).toUpperCase()+local.severity.slice(1)}
-                  </span>
+                  {canEdit ? (
+                    <InlineSelect
+                      value={local.severity ?? 'medium'}
+                      options={['critical','high','medium','low']}
+                      onChange={v => {
+                        const from = local.severity ?? '—'
+                        trackChange('Severidade', from, v, { severity: v })
+                      }}
+                      getLabel={v => v.charAt(0).toUpperCase()+v.slice(1)}
+                      getColor={v => v==='critical'?T.crit:v==='high'?T.warn:v==='low'?T.text3:T.accent}
+                    />
+                  ) : (
+                    <span style={{ fontSize:12, fontWeight:600, color:local.severity==='critical'?T.crit:local.severity==='high'?T.warn:T.accent }}>
+                      {local.severity ? local.severity.charAt(0).toUpperCase()+local.severity.slice(1) : '—'}
+                    </span>
+                  )}
                 </DetailRow>
               )}
 
