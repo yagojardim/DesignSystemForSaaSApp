@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect, type ReactNode } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { T as DS } from '../components/ds/tokens'
 import { CreateIssueModal } from '../components/CreateIssueModal'
 import { CompleteSprintModal } from '../components/CompleteSprintModal'
 import { useSession } from '../data/SessionContext'
 import { can } from '../data/permissions'
+import { WorkItemDetail, type WorkItemData } from '../components/WorkItemDetail'
 
 // ─── RULE annotations ────────────────────────────────────────────────────────
 // RULE 1: "planejado não é sobrescrito" — planned sprint data is immutable until explicitly started
@@ -588,31 +589,68 @@ function BoardCard({ issue, dragging, onDragStart, onDragEnd, onOpen, canDrag }:
   )
 }
 
-// ─── WorkItemDetailDrawer (P4) ────────────────────────────────────────────────
+// ─── Issue ↔ WorkItemData adapter ────────────────────────────────────────────
 const STATUS_LABEL: Record<string, string> = {
   backlog:'Backlog', todo:'A fazer', 'in-progress':'Em andamento', 'in-review':'Em revisão', done:'Concluído',
 }
 const STATUS_COLOR: Record<string, string> = {
   backlog:DS.text3, todo:DS.text2, 'in-progress':DS.accent, 'in-review':DS.warn, done:DS.success,
 }
-const PRIORITY_LABEL: Record<string, string> = {
-  critical:'🔴 Crítico', high:'🟠 Alto', medium:'🟡 Médio', low:'🟢 Baixo',
-}
-const TYPE_LABEL: Record<string, string> = {
-  story:'História', bug:'Bug', task:'Tarefa', subtask:'Sub-tarefa', epic:'Épico', feature:'Feature',
-}
-const ASSIGNEE_LIST = ['AL','NM','JN','CS','RM','LF']
-const ASSIGNEE_NAMES: Record<string, string> = {
+const NAMES: Record<string, string> = {
   AL:'Ana Lima', NM:'Natalia Moura', JN:'Julia Neves', CS:'Carlos Silva', RM:'Rafael Mendes', LF:'Lucas Ferreira',
 }
 
-function MetaField({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div>
-      <p style={{ margin:'0 0 3px', fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em', color:DS.text3 }}>{label}</p>
-      <div style={{ fontSize:13, color:DS.text1 }}>{children}</div>
-    </div>
-  )
+function issueToWID(issue: Issue): WorkItemData {
+  const epic   = EPICS.find(e => e.id === issue.epic)
+  const sprint = SPRINTS.find(s => s.id === issue.sprint)
+  return {
+    key:              issue.key,
+    type:             issue.type,
+    title:            issue.title,
+    status:           issue.status,
+    priority:         issue.priority,
+    labels:           issue.labels,
+    assigneeInitials: issue.assignee,
+    assigneeName:     NAMES[issue.assignee],
+    reporterInitials: issue.reporter,
+    reporterName:     issue.reporter ? NAMES[issue.reporter] : undefined,
+    epicKey:          issue.epic,
+    epicLabel:        epic?.label,
+    epicColor:        epic?.color,
+    sprintName:       sprint?.name,
+    blocked:          issue.blocked,
+    blockedReason:    issue.blocked_reason,
+    delayed:          issue.delayed,
+    severity:         issue.severity,
+    description:      issue.description,
+    dueDate:          issue.dueDate,
+    points:           issue.points,
+    fixVersions:      [],
+    acItems:          issue.acceptance_criteria_count
+      ? Array.from({ length: issue.acceptance_criteria_count }, (_, i) => ({ id:`ac-${i}`, text:`Critério de aceite ${i+1}`, done: i === 0 }))
+      : [],
+    comments:         (issue.comments ?? []).map(c => ({ author: c.author, body: c.text, time: c.when })),
+    evidenceCount:    issue.evidence_count,
+    attachmentCount:  issue.attachment_count,
+    createdAt:        'Abr 2025',
+    updatedAt:        'Abr 2025',
+  }
+}
+
+function widToIssue(issue: Issue, updated: WorkItemData): Issue {
+  return {
+    ...issue,
+    title:                     updated.title,
+    status:                    updated.status as IssueStatus,
+    priority:                  updated.priority as Priority,
+    labels:                    updated.labels,
+    assignee:                  updated.assigneeInitials,
+    blocked:                   updated.blocked,
+    blocked_reason:            updated.blockedReason,
+    description:               updated.description,
+    comments:                  (updated.comments ?? []).map(c => ({ author: c.author, text: c.body, when: c.time })),
+    acceptance_criteria_count: updated.acItems?.length,
+  }
 }
 
 function WorkItemDetailDrawer({ issue, onClose, onUpdate }: {
@@ -620,356 +658,13 @@ function WorkItemDetailDrawer({ issue, onClose, onUpdate }: {
   onClose: () => void
   onUpdate: (updated: Issue) => void
 }) {
-  const { activeUser } = useSession()
-  const canEdit = can(activeUser.permissions, 'board:manage')
-
-  const [local, setLocal]           = useState<Issue>(issue)
-  const [statusOpen, setStatusOpen] = useState(false)
-  const [commentText, setComment]   = useState('')
-  const [comments, setComments]     = useState<IssueComment[]>(issue.comments ?? [])
-  const [loading, setLoading]       = useState(true)
-
-  useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 260)
-    return () => clearTimeout(t)
-  }, [])
-
-  const tags = getCardTags(local)
-
-  function update(patch: Partial<Issue>) {
-    const updated = { ...local, ...patch }
-    setLocal(updated)
-    onUpdate(updated)
-  }
-
-  function handleStatusChange(s: IssueStatus) {
-    update({ status: s })
-    setStatusOpen(false)
-  }
-
-  function handleAssigneeChange(a: string) {
-    update({ assignee: a })
-  }
-
-  function handleAddComment() {
-    const t = commentText.trim()
-    if (!t) return
-    const c: IssueComment = {
-      author: activeUser.name.split(' ').slice(0,2).map(p=>p[0]).join(''),
-      text: t,
-      when: 'agora',
-    }
-    const newComments = [...comments, c]
-    setComments(newComments)
-    update({ comments: newComments, comment_count: newComments.length })
-    setComment('')
-  }
-
   return (
-    <>
-      {/* Backdrop */}
-      <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:300 }} />
-
-      {/* Panel */}
-      <div style={{
-        position:'fixed', top:0, right:0, bottom:0, width:460,
-        background:S.surface, borderLeft:`1px solid ${S.border}`,
-        boxShadow:'-10px 0 40px rgba(0,0,0,0.45)',
-        zIndex:301, display:'flex', flexDirection:'column', overflow:'hidden',
-      }}>
-
-        {/* ── Header ────────────────────────────────────────────────────── */}
-        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'13px 16px', borderBottom:`1px solid ${S.border}`, flexShrink:0 }}>
-          <TypeIcon t={local.type} />
-          <span style={{ fontFamily:'monospace', fontSize:11, color:DS.text3, background:S.surface2, border:`1px solid ${S.border}`, borderRadius:4, padding:'1px 6px' }}>
-            {local.key}
-          </span>
-          <span style={{ fontSize:11, color:DS.text3 }}>{TYPE_LABEL[local.type]}</span>
-
-          {/* Status pill / dropdown */}
-          <div style={{ position:'relative' }}>
-            <button
-              onClick={() => canEdit && setStatusOpen(o => !o)}
-              style={{
-                display:'flex', alignItems:'center', gap:4, padding:'3px 10px', borderRadius:20,
-                background:`${STATUS_COLOR[local.status]}18`, border:`1px solid ${STATUS_COLOR[local.status]}40`,
-                color:STATUS_COLOR[local.status], fontSize:11, fontWeight:600,
-                cursor: canEdit ? 'pointer' : 'default',
-              }}
-              title={canEdit ? 'Alterar status' : 'Sem permissão para editar'}
-            >
-              <span style={{ width:6, height:6, borderRadius:'50%', background:STATUS_COLOR[local.status], display:'inline-block', flexShrink:0 }} />
-              {STATUS_LABEL[local.status] ?? local.status}
-              {canEdit && <span style={{ opacity:0.6, fontSize:10 }}>▾</span>}
-            </button>
-            {statusOpen && (
-              <div onClick={e=>e.stopPropagation()} style={{
-                position:'absolute', top:'110%', left:0, zIndex:50, minWidth:160,
-                background:S.surface, border:`1px solid ${S.border2}`, borderRadius:10,
-                boxShadow:DS.shadowModal, padding:'4px 0', overflow:'hidden',
-              }}>
-                {(['backlog','todo','in-progress','in-review','done'] as IssueStatus[]).map(s => (
-                  <button key={s} onClick={()=>handleStatusChange(s)} style={{
-                    width:'100%', display:'flex', alignItems:'center', gap:8,
-                    padding:'7px 12px', background:'none', border:'none', cursor:'pointer',
-                    color: s===local.status ? STATUS_COLOR[s] : S.t2, fontSize:12,
-                    fontWeight: s===local.status ? 700 : 400, textAlign:'left',
-                  }}
-                  onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background=S.surface2}}
-                  onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background='none'}}>
-                    <span style={{ width:6, height:6, borderRadius:'50%', background:STATUS_COLOR[s], flexShrink:0, display:'inline-block' }} />
-                    {STATUS_LABEL[s]}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {!canEdit && (
-            <span style={{ fontSize:10, color:DS.text3, background:S.surface2, border:`1px solid ${S.border}`, borderRadius:6, padding:'2px 8px' }}>
-              Somente leitura
-            </span>
-          )}
-
-          <button onClick={onClose} style={{ marginLeft:'auto', width:26, height:26, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:6, border:'none', background:'transparent', color:DS.text3, cursor:'pointer', fontSize:16 }}
-            onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background=S.surface2}}
-            onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background='transparent'}}>
-            ✕
-          </button>
-        </div>
-
-        {/* ── Body ──────────────────────────────────────────────────────── */}
-        <div style={{ flex:1, overflowY:'auto', padding:'18px 20px' }}>
-
-          {/* Loading skeleton */}
-          {loading && (
-            <div className="animate-pulse space-y-3">
-              <div style={{ height:22, width:'72%', borderRadius:6, background:S.surface2 }} />
-              <div style={{ height:14, width:'40%', borderRadius:6, background:S.surface2 }} />
-              <div style={{ height:100, borderRadius:10, background:S.surface2 }} />
-              <div style={{ height:14, width:'60%', borderRadius:6, background:S.surface2 }} />
-              <div style={{ height:14, width:'80%', borderRadius:6, background:S.surface2 }} />
-              <div style={{ height:60, borderRadius:8, background:S.surface2 }} />
-            </div>
-          )}
-
-          {/* Content (shown after load) */}
-          {!loading && <>
-
-          {/* Title */}
-          <h2 style={{ margin:'0 0 16px', fontSize:17, fontWeight:700, color:DS.text1, lineHeight:1.35 }}>
-            {local.title}
-          </h2>
-
-          {/* Priority + labels row */}
-          <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:6, marginBottom:16 }}>
-            <span style={{ fontSize:11, fontWeight:500, color:PRIORITY_COLOR[local.priority] }}>
-              {PRIORITY_LABEL[local.priority]}
-            </span>
-            {local.labels.map(l => <LabelChip key={l} name={l} />)}
-          </div>
-
-          {/* Meta grid */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px 24px', marginBottom:20, padding:'14px 16px', background:S.surface2, borderRadius:10, border:`1px solid ${S.border}` }}>
-            <MetaField label="Status">
-              <span style={{ color:STATUS_COLOR[local.status], fontWeight:600 }}>{STATUS_LABEL[local.status]}</span>
-            </MetaField>
-            <MetaField label="Prioridade">
-              <span>{PRIORITY_LABEL[local.priority]}</span>
-            </MetaField>
-            <MetaField label="Responsável">
-              {canEdit ? (
-                <select value={local.assignee} onChange={e=>handleAssigneeChange(e.target.value)}
-                  style={{ background:S.surface, border:`1px solid ${S.border}`, borderRadius:6, padding:'2px 6px', color:DS.text1, fontSize:13, outline:'none', colorScheme:'dark' }}>
-                  {ASSIGNEE_LIST.map(a=>(
-                    <option key={a} value={a} style={{ background:S.surface }}>{ASSIGNEE_NAMES[a] ?? a}</option>
-                  ))}
-                </select>
-              ) : (
-                <span style={{ display:'flex', alignItems:'center', gap:6 }}>
-                  <Av i={local.assignee} size={18} />
-                  <span>{(ASSIGNEE_NAMES[local.assignee] ?? local.assignee) || '—'}</span>
-                </span>
-              )}
-            </MetaField>
-            {local.reporter && (
-              <MetaField label="Reporter">
-                <span style={{ display:'flex', alignItems:'center', gap:6 }}>
-                  <Av i={local.reporter} size={18} />
-                  <span>{ASSIGNEE_NAMES[local.reporter] ?? local.reporter}</span>
-                </span>
-              </MetaField>
-            )}
-            <MetaField label="Prazo"><span style={{ color:local.delayed?DS.warn:DS.text1 }}>{local.dueDate || '—'}</span></MetaField>
-            <MetaField label="Story Points"><span>{local.points ? `${local.points} pt` : '—'}</span></MetaField>
-            {local.sprint && <MetaField label="Sprint"><span>{SPRINTS.find(s=>s.id===local.sprint)?.name ?? local.sprint}</span></MetaField>}
-            {local.epic && <MetaField label="Épico">
-              <span style={{ color:EPICS.find(e=>e.id===local.epic)?.color ?? DS.accent }}>
-                {EPICS.find(e=>e.id===local.epic)?.label ?? local.epic}
-              </span>
-            </MetaField>}
-            {local.type === 'bug' && local.severity && (
-              <MetaField label="Severidade">
-                <span style={{ fontWeight:600, color:local.severity==='critical'?DS.crit:local.severity==='high'?DS.warn:DS.accent }}>
-                  {local.severity.charAt(0).toUpperCase()+local.severity.slice(1)}
-                </span>
-              </MetaField>
-            )}
-            {local.type === 'subtask' && (
-              <MetaField label="Task pai">
-                <span style={{ color:local.parent_id?DS.text1:DS.crit }}>
-                  {local.parent_id ?? '⛔ Não associada'}
-                </span>
-              </MetaField>
-            )}
-          </div>
-
-          {/* Blocked reason */}
-          {local.blocked && (
-            <div style={{ marginBottom:16, padding:'10px 14px', background:DS.critDim, border:`1px solid ${DS.crit}30`, borderRadius:8, display:'flex', gap:8 }}>
-              <span style={{ color:DS.crit, flexShrink:0 }}>⛔</span>
-              <div>
-                <p style={{ margin:'0 0 2px', fontSize:11, fontWeight:700, color:DS.crit }}>Bloqueado</p>
-                <p style={{ margin:0, fontSize:12, color:DS.text2 }}>{local.blocked_reason || 'Motivo não especificado.'}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Quality tags (P3) */}
-          {tags.length > 0 && (
-            <div style={{ marginBottom:16 }}>
-              <p style={{ margin:'0 0 6px', fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em', color:DS.text3 }}>Indicadores de qualidade</p>
-              <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
-                {tags.map(tag => {
-                  const c = TAG_COLORS[tag.level]
-                  return (
-                    <span key={tag.label} style={{ fontSize:11, padding:'3px 10px', borderRadius:20, background:c.bg, color:c.color, fontWeight:600, border:`1px solid ${c.color}30` }}>
-                      {tag.label}
-                    </span>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Description */}
-          <div style={{ marginBottom:20 }}>
-            <p style={{ margin:'0 0 6px', fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em', color:DS.text3 }}>Descrição</p>
-            {local.description?.trim() ? (
-              <div style={{ fontSize:13, color:DS.text1, lineHeight:1.6, whiteSpace:'pre-wrap' }}>
-                {local.description}
-              </div>
-            ) : (
-              <div style={{ fontSize:12, color:DS.text3, fontStyle:'italic', padding:'10px 12px', background:S.surface2, borderRadius:8, border:`1px dashed ${S.border2}` }}>
-                Sem descrição. {canEdit ? 'Clique para adicionar...' : ''}
-              </div>
-            )}
-          </div>
-
-          {/* Counters row */}
-          {((local.acceptance_criteria_count ?? 0) > 0 || (local.evidence_count ?? 0) > 0 || (local.attachment_count ?? 0) > 0) && (
-            <div style={{ display:'flex', gap:12, marginBottom:20 }}>
-              {(local.acceptance_criteria_count ?? 0) > 0 && (
-                <span style={{ fontSize:11, color:DS.success }}>✓ {local.acceptance_criteria_count} critério{local.acceptance_criteria_count!==1?'s':''} de aceite</span>
-              )}
-              {(local.evidence_count ?? 0) > 0 && (
-                <span style={{ fontSize:11, color:DS.text2 }}>🔬 {local.evidence_count} evidência{local.evidence_count!==1?'s':''}</span>
-              )}
-              {(local.attachment_count ?? 0) > 0 && (
-                <span style={{ fontSize:11, color:DS.text2 }}>📎 {local.attachment_count} anexo{local.attachment_count!==1?'s':''}</span>
-              )}
-            </div>
-          )}
-
-          {/* Comments */}
-          <div>
-            <p style={{ margin:'0 0 10px', fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em', color:DS.text3 }}>
-              Comentários {comments.length > 0 && <span style={{ color:DS.accent }}>({comments.length})</span>}
-            </p>
-
-            {comments.length === 0 && (
-              <p style={{ fontSize:12, color:DS.text3, fontStyle:'italic', marginBottom:10 }}>Nenhum comentário ainda.</p>
-            )}
-
-            <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:12 }}>
-              {comments.map((c, i) => (
-                <div key={i} style={{ display:'flex', gap:8, padding:'8px 10px', background:S.surface2, borderRadius:8, border:`1px solid ${S.border}` }}>
-                  <Av i={c.author} size={22} />
-                  <div style={{ flex:1 }}>
-                    <div style={{ display:'flex', alignItems:'baseline', gap:6, marginBottom:3 }}>
-                      <span style={{ fontSize:11, fontWeight:600, color:DS.text1 }}>{ASSIGNEE_NAMES[c.author] ?? c.author}</span>
-                      <span style={{ fontSize:10, color:DS.text3 }}>{c.when}</span>
-                    </div>
-                    <p style={{ margin:0, fontSize:12, color:DS.text2, lineHeight:1.5 }}>{c.text}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Comment input */}
-            <div style={{ display:'flex', gap:8, alignItems:'flex-end' }}>
-              <Av i={activeUser.name.split(' ').slice(0,2).map(p=>p[0]).join('')} size={22} />
-              <div style={{ flex:1 }}>
-                <textarea
-                  value={commentText}
-                  onChange={e=>setComment(e.target.value)}
-                  placeholder="Escreva um comentário..."
-                  rows={2}
-                  onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); handleAddComment() } }}
-                  style={{
-                    width:'100%', background:S.surface2, border:`1px solid ${S.border}`, borderRadius:8,
-                    padding:'8px 10px', color:DS.text1, fontSize:12, outline:'none', resize:'none',
-                    fontFamily:'inherit', lineHeight:1.4, boxSizing:'border-box',
-                  }}
-                  onFocus={e=>{e.currentTarget.style.borderColor=DS.accent}}
-                  onBlur={e=>{e.currentTarget.style.borderColor=S.border}}
-                />
-                <div style={{ display:'flex', justifyContent:'flex-end', marginTop:4 }}>
-                  <button onClick={handleAddComment} disabled={!commentText.trim()}
-                    style={{
-                      fontSize:11, fontWeight:600, padding:'4px 12px', borderRadius:6, border:'none',
-                      background:commentText.trim()?DS.accent:S.border2, color:'#fff',
-                      cursor:commentText.trim()?'pointer':'not-allowed',
-                    }}>
-                    Enviar
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-          </>}{/* end !loading */}
-        </div>
-
-        {/* ── Footer ────────────────────────────────────────────────────── */}
-        <div style={{ flexShrink:0, padding:'10px 16px', borderTop:`1px solid ${S.border}`, display:'flex', alignItems:'center', gap:8 }}>
-          {canEdit && (
-            <>
-              <button style={{ fontSize:12, fontWeight:600, padding:'6px 14px', borderRadius:8, border:`1px solid ${S.border}`, background:'transparent', color:DS.text2, cursor:'pointer' }}
-                onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background=S.surface2}}
-                onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background='transparent'}}>
-                Editar campos
-              </button>
-              {!local.blocked ? (
-                <button onClick={()=>update({ blocked:true, blocked_reason:'' })}
-                  style={{ fontSize:12, fontWeight:600, padding:'6px 14px', borderRadius:8, border:`1px solid ${DS.crit}40`, background:DS.critDim, color:DS.crit, cursor:'pointer' }}>
-                  Marcar bloqueado
-                </button>
-              ) : (
-                <button onClick={()=>update({ blocked:false, blocked_reason:'' })}
-                  style={{ fontSize:12, fontWeight:600, padding:'6px 14px', borderRadius:8, border:`1px solid ${DS.success}40`, background:DS.successDim, color:DS.success, cursor:'pointer' }}>
-                  Resolver bloqueio
-                </button>
-              )}
-            </>
-          )}
-          <button onClick={onClose} style={{ marginLeft:'auto', fontSize:13, fontWeight:600, padding:'7px 20px', borderRadius:8, background:DS.accent, color:'#fff', border:'none', cursor:'pointer' }}
-            onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.filter='brightness(1.12)'}}
-            onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.filter='none'}}>
-            Fechar
-          </button>
-        </div>
-      </div>
-    </>
+    <WorkItemDetail
+      mode="drawer"
+      data={issueToWID(issue)}
+      onClose={onClose}
+      onUpdate={updated => onUpdate(widToIssue(issue, updated))}
+    />
   )
 }
 
