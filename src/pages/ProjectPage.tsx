@@ -716,10 +716,14 @@ const INITIAL_COLS: ColState[] = [
 
 let _issueSeq = 200
 
-function BoardTab({ issues, setIssues, onCreateIssue }: {
+function BoardTab({ issues, setIssues, onCreateIssue, onCreateIssueInCol, onCompleteSprint, canManageSprint, activeSprints }: {
   issues: Issue[]
   setIssues: (fn: (prev: Issue[]) => Issue[]) => void
   onCreateIssue: () => void
+  onCreateIssueInCol: (colStatus: string, sprintId: string) => void
+  onCompleteSprint: (s: SprintDef) => void
+  canManageSprint: boolean
+  activeSprints: SprintDef[]
 }) {
   const { activeUser: boardUser } = useSession()
   const canDrag = can(boardUser.permissions, 'board:manage')
@@ -873,6 +877,30 @@ function BoardTab({ issues, setIssues, onCreateIssue }: {
             <option key={s.id} value={s.id} style={{ background:S.surface2 }}>{s.name} {s.state==='active'?'▶':''}</option>
           ))}
         </select>
+        {/* Encerrar sprint */}
+        {(() => {
+          const currentSprint = (activeSprints ?? SPRINTS).find(s => s.id === activeSprint)
+          const isActive = currentSprint?.state === 'active'
+          const disabled = !canManageSprint || !isActive
+          return (
+            <button
+              onClick={()=>{ if(!disabled && currentSprint) onCompleteSprint(currentSprint) }}
+              disabled={disabled}
+              title={!canManageSprint ? 'Requer permissão: Gerenciar Sprint' : !isActive ? 'Nenhuma sprint ativa selecionada' : `Encerrar ${currentSprint?.name}`}
+              className="h-7 px-2.5 rounded-lg text-[11px] font-medium flex items-center gap-1.5 flex-shrink-0 transition-all"
+              style={{
+                background: disabled ? S.surface2 : DS.warnDim,
+                border: `1px solid ${disabled ? S.border : DS.warn+'60'}`,
+                color: disabled ? S.t3 : DS.warn,
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                opacity: disabled ? 0.6 : 1,
+              }}
+              onMouseEnter={e=>{ if(!disabled)(e.currentTarget as HTMLButtonElement).style.background=DS.warn+'22' }}
+              onMouseLeave={e=>{ if(!disabled)(e.currentTarget as HTMLButtonElement).style.background=DS.warnDim }}>
+              ⏹ Encerrar sprint
+            </button>
+          )
+        })()}
         <div className="w-px h-4 flex-shrink-0" style={{ background:S.border }}/>
         <div className="flex items-center gap-1">
           {ASSIGNEES.map(a=>(
@@ -976,9 +1004,9 @@ function BoardTab({ issues, setIssues, onCreateIssue }: {
                   {/* Header actions */}
                   {col.id !== 'unmapped' && (
                     <div className="flex items-center gap-0.5 flex-shrink-0 ml-1">
-                      {/* Quick "+" — opens inline composer */}
+                      {/* Quick "+" — opens CreateIssueModal pre-filled with column status */}
                       <button
-                        onClick={e=>{ e.stopPropagation(); openComposer(col.id) }}
+                        onClick={e=>{ e.stopPropagation(); onCreateIssueInCol(col.statuses[0] ?? 'todo', activeSprint) }}
                         title="Criar issue nesta coluna"
                         className="w-5 h-5 flex items-center justify-center rounded transition-colors text-[15px] leading-none"
                         style={{ color:S.t3 }}
@@ -1103,9 +1131,9 @@ function BoardTab({ issues, setIssues, onCreateIssue }: {
                     })
                   )}
 
-                  {/* Bottom add button */}
-                  {col.id !== 'unmapped' && composerCol !== col.id && (
-                    <button onClick={()=>openComposer(col.id)}
+                  {/* Bottom add button — opens CreateIssueModal pre-filled with column status */}
+                  {col.id !== 'unmapped' && (
+                    <button onClick={()=>onCreateIssueInCol(col.statuses[0] ?? 'todo', activeSprint)}
                       className="w-full py-1.5 rounded-lg text-[11px] transition-all text-center mt-auto"
                       style={{ color:S.t3, border:`1px dashed ${S.border}` }}
                       onMouseEnter={e=>{ (e.currentTarget as HTMLButtonElement).style.background=DS.accentDim;(e.currentTarget as HTMLButtonElement).style.borderColor=DS.accent;(e.currentTarget as HTMLButtonElement).style.color=DS.accent }}
@@ -1695,7 +1723,7 @@ export default function ProjectPage() {
   const [tab, setTab]     = useState<Tab>('Board')
   const [issues, setIssues]   = useState<Issue[]>(INIT_ISSUES)
   const [sprints, setSprints] = useState<SprintDef[]>(SPRINTS)
-  const [quickCreate, setQuickCreate] = useState<{colStatus?:string}|null>(null)
+  const [quickCreate, setQuickCreate] = useState<{colStatus?:string; sprintId?:string}|null>(null)
   const [completingSprint, setCompletingSprint] = useState<SprintDef|null>(null)
   const [toast, setToast] = useState<string|null>(null)
 
@@ -1821,7 +1849,15 @@ export default function ProjectPage() {
 
       {/* Tab content */}
       {tab === 'Board' && (
-        <BoardTab issues={issues} setIssues={fn => setIssues(fn)} onCreateIssue={()=>setQuickCreate({})} />
+        <BoardTab
+          issues={issues}
+          setIssues={fn => setIssues(fn)}
+          onCreateIssue={()=>setQuickCreate({})}
+          onCreateIssueInCol={(colStatus, sprintId)=>setQuickCreate({ colStatus, sprintId })}
+          onCompleteSprint={s=>setCompletingSprint(s)}
+          canManageSprint={canManageSprint}
+          activeSprints={sprints}
+        />
       )}
       {tab === 'Backlog' && (
         <BacklogTab issues={issues} sprints={sprints} canManageSprint={canManageSprint} onCreateIssue={()=>setQuickCreate({})} onCompleteSprint={s=>setCompletingSprint(s)} onUpdateIssue={updated=>setIssues(prev=>prev.map(i=>i.key===updated.key?updated:i))} />
@@ -1831,7 +1867,38 @@ export default function ProjectPage() {
       )}
 
     </div>
-    {quickCreate !== null && <CreateIssueModal onClose={()=>setQuickCreate(null)} onCreate={()=>setQuickCreate(null)} />}
+    {quickCreate !== null && (
+      <CreateIssueModal
+        onClose={()=>setQuickCreate(null)}
+        defaultStatus={quickCreate.colStatus}
+        defaultSprintId={quickCreate.sprintId}
+        onCreate={data => {
+          // Map modal output → Issue and persist
+          const sprintMatch = sprints.find(s =>
+            quickCreate.sprintId ? s.id === quickCreate.sprintId : s.state === 'active'
+          )
+          const labelArr = data.labels ? String(data.labels).split(',').map((l:string)=>l.trim()).filter(Boolean) : []
+          const newIssue: Issue = {
+            key:      `PM-${++_issueSeq}`,
+            type:     (data.type as IssueType) ?? 'story',
+            title:    String(data.summary ?? ''),
+            status:   (quickCreate.colStatus as IssueStatus) ?? 'todo',
+            priority: (data.priority as Priority) ?? 'medium',
+            labels:   labelArr,
+            assignee: String(data.assignee ?? 'AL'),
+            dueDate:  '',
+            points:   parseInt(String(data.points ?? '0')) || 0,
+            sprint:   sprintMatch?.id ?? quickCreate.sprintId,
+            epic:     data.epic ? String(data.epic).split(' ')[0] : undefined,
+            description: String(data.description ?? ''),
+          }
+          setIssues(prev => [newIssue, ...prev])
+          setToast(`Issue ${newIssue.key} criada na coluna`)
+          setTimeout(() => setToast(null), 3500)
+          setQuickCreate(null)
+        }}
+      />
+    )}
     {completingSprint && (() => {
       const sprintIssues  = issues.filter(i => i.sprint === completingSprint.id)
       const doneCount     = sprintIssues.filter(i => i.status === 'done').length

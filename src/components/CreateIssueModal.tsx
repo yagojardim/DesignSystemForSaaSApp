@@ -13,8 +13,10 @@ type IssueType = 'epic' | 'story' | 'task' | 'bug' | 'subtask'
 type Priority  = 'critical' | 'high' | 'medium' | 'low'
 
 interface CreateIssueModalProps {
-  onClose:  () => void
-  onCreate: (data: Record<string, unknown>) => void
+  onClose:        () => void
+  onCreate:       (data: Record<string, unknown>) => void
+  defaultStatus?: string
+  defaultSprintId?: string
 }
 
 const TYPE_CFG: Record<IssueType, { icon: string; color: string; label: string; desc: string }> = {
@@ -137,7 +139,7 @@ function StepsField({ steps, onChange }: { steps: string[]; onChange:(s:string[]
   )
 }
 
-export function CreateIssueModal({ onClose, onCreate }: CreateIssueModalProps) {
+export function CreateIssueModal({ onClose, onCreate, defaultStatus, defaultSprintId }: CreateIssueModalProps) {
   // Permission-gated issue types
   const activeUser = getActiveUser()
   const perms = activeUser?.permissions ?? []
@@ -149,12 +151,18 @@ export function CreateIssueModal({ onClose, onCreate }: CreateIssueModalProps) {
     if (t === 'subtask') return can(perms, 'create:subtask')
     return false
   })
+
+  // Map defaultSprintId to a display string
+  const defaultSprintLabel = defaultSprintId === 's14' ? SPRINTS[0]
+    : defaultSprintId === 's15' ? SPRINTS[1]
+    : SPRINTS[0]
+
   const [type,        setType]       = useState<IssueType>(allowedTypes[0] ?? 'task')
   const [summary,     setSummary]    = useState('')
   const [description, setDesc]       = useState('')
   const [priority,    setPriority]   = useState<Priority>('medium')
   const [assignee,    setAssignee]   = useState('')
-  const [sprint,      setSprint]     = useState(SPRINTS[0])
+  const [sprint,      setSprint]     = useState(defaultSprintLabel)
   const [epic,        setEpic]       = useState(EPICS[0])
   const [points,      setPoints]     = useState('')
   const [labels,      setLabels]     = useState('')
@@ -221,6 +229,11 @@ export function CreateIssueModal({ onClose, onCreate }: CreateIssueModalProps) {
             <span className="text-[16px]" style={{ color:cfg.color }}>{cfg.icon}</span>
             <p className="text-[15px] font-bold" style={{ color:T.text1 }}>Criar issue</p>
             <span className="text-[11px] px-2 py-0.5 rounded-lg" style={{ background:`${cfg.color}18`, color:cfg.color }}>{cfg.label}</span>
+            {defaultStatus && (
+              <span className="text-[10px] px-2 py-0.5 rounded-lg font-medium" style={{ background:T.accentDim, color:T.accent, border:`1px solid ${T.accentBorder}` }}>
+                → {defaultStatus === 'in-progress' ? 'Em andamento' : defaultStatus === 'in-review' ? 'Em revisão' : defaultStatus === 'todo' ? 'A Fazer' : defaultStatus === 'done' ? 'Concluído' : defaultStatus}
+              </span>
+            )}
           </div>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg text-lg leading-none" style={{ color:T.text3 }}
             onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background=T.bgSurface2}}
