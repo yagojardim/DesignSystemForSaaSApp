@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useCatalog } from '../data/CatalogContext'
 import { T } from '../components/ds/tokens'
 
-type Tab = 'workflow' | 'issueTypes' | 'components' | 'labels' | 'priorities' | 'board' | 'members'
+type Tab = 'workflow' | 'issueTypes' | 'components' | 'labels' | 'priorities' | 'board'
 
 const TABS: { id: Tab; label: string }[] = [
   { id:'workflow',    label:'Workflow' },
@@ -11,7 +11,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id:'labels',      label:'Labels' },
   { id:'priorities',  label:'Prioridades' },
   { id:'board',       label:'Config do Board' },
-  { id:'members',     label:'Pessoas & Papéis' },
 ]
 
 const COLOR_PRESETS = ['#7d92ff','#35c9ae','#e6b23c','#f0805c','#a78bfa','#22d3ee','#fb923c','#f472b6']
@@ -671,170 +670,6 @@ function BoardConfigTab() {
   )
 }
 
-function MembersTab() {
-  const { catalog, updateMembers } = useCatalog()
-  const toast = useToast()
-  const [inviteOpen, setInviteOpen] = useState(false)
-  const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteRole, setInviteRole] = useState<'Admin'|'Member'|'Viewer'>('Member')
-
-  function changeRole(id: string, role: 'Admin'|'Member'|'Viewer') {
-    updateMembers(prev => prev.map(m => m.id === id ? { ...m, role } : m))
-    toast.fire()
-  }
-
-  function removeMember(id: string) {
-    updateMembers(prev => prev.filter(m => m.id !== id)); toast.fire()
-  }
-
-  function invite() {
-    if (!inviteEmail.trim()) return
-    const initials = inviteEmail.split('@')[0].slice(0,2).toUpperCase()
-    updateMembers(prev => [...prev, {
-      id:'m'+Date.now(), name:inviteEmail, initials, email:inviteEmail,
-      role:inviteRole, avatarColor:T.accent,
-    }])
-    setInviteEmail(''); setInviteOpen(false); toast.fire()
-  }
-
-  const selectStyle: React.CSSProperties = {
-    background:T.bgSurface2, border:`1px solid ${T.border2}`, borderRadius:6,
-    color:T.text1, padding:'4px 8px', fontSize:12, outline:'none',
-  }
-
-  const thStyle: React.CSSProperties = {
-    textAlign:'left', padding:'8px 12px', fontSize:11, color:T.text3,
-    fontWeight:600, letterSpacing:'0.06em', textTransform:'uppercase',
-    borderBottom:`1px solid ${T.border}`,
-  }
-
-  const tdStyle: React.CSSProperties = { padding:'10px 12px', fontSize:13 }
-
-  function roleBadgeStyle(role: string): React.CSSProperties {
-    if (role==='Admin')  return { background:T.accentDim, color:T.accent }
-    if (role==='Member') return { background:T.successDim, color:T.success }
-    return { background:T.bgSurface2, color:T.text3 }
-  }
-
-  return (
-    <div>
-      <div style={{
-        padding:'12px 16px', borderRadius:8, background:T.warnDim,
-        border:`1px solid rgba(230,178,60,0.3)`, fontSize:13, color:T.warn, marginBottom:20,
-      }}>
-        ℹ️ Mudanças de papel refletem imediatamente nas permissões de visualização.
-      </div>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-        <div style={{ fontSize:15, fontWeight:600, color:T.text1 }}>Pessoas & Papéis</div>
-        <button
-          onClick={() => setInviteOpen(true)}
-          style={{ padding:'8px 18px', borderRadius:8, border:'none', background:T.accent, color:'#fff', fontSize:13, fontWeight:500, cursor:'pointer' }}
-        >
-          + Convidar membro
-        </button>
-      </div>
-      <div style={{ background:T.bgSurface, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden', marginBottom:16 }}>
-        <table style={{ width:'100%', borderCollapse:'collapse' }}>
-          <thead>
-            <tr>
-              <th style={thStyle}>Membro</th>
-              <th style={thStyle}>Email</th>
-              <th style={thStyle}>Papel</th>
-              <th style={thStyle}>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {catalog.members.map((m, i) => (
-              <tr key={m.id} style={{ background:i%2===0?'transparent':T.bgSurface2, borderBottom:`1px solid ${T.border}` }}>
-                <td style={{ ...tdStyle, display:'flex', alignItems:'center', gap:10 }}>
-                  <span style={{
-                    width:32, height:32, borderRadius:'50%', background:m.avatarColor,
-                    display:'flex', alignItems:'center', justifyContent:'center',
-                    fontSize:12, fontWeight:700, color:'#fff', flexShrink:0,
-                  }}>{m.initials}</span>
-                  <span style={{ color:T.text1, fontWeight:500 }}>{m.name}</span>
-                </td>
-                <td style={{ ...tdStyle, color:T.text3 }}>{m.email}</td>
-                <td style={tdStyle}>
-                  <select
-                    value={m.role}
-                    onChange={e => changeRole(m.id, e.target.value as 'Admin'|'Member'|'Viewer')}
-                    style={{ ...selectStyle, ...roleBadgeStyle(m.role), borderRadius:20, padding:'3px 10px' }}
-                  >
-                    <option value="Admin">Admin</option>
-                    <option value="Member">Member</option>
-                    <option value="Viewer">Viewer</option>
-                  </select>
-                </td>
-                <td style={tdStyle}>
-                  <button onClick={() => removeMember(m.id)} style={{ background:'none', border:`1px solid ${T.border2}`, borderRadius:6, color:T.crit, fontSize:12, padding:'3px 10px', cursor:'pointer' }}>
-                    Remover
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Invite modal */}
-      {inviteOpen && (
-        <div style={{
-          position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:200,
-          display:'flex', alignItems:'center', justifyContent:'center',
-        }} onClick={() => setInviteOpen(false)}>
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              background:T.bgSurface, border:`1px solid ${T.border2}`, borderRadius:16,
-              padding:28, width:400, boxShadow:T.shadowModal,
-            }}
-          >
-            <div style={{ fontSize:16, fontWeight:600, color:T.text1, marginBottom:20 }}>Convidar membro</div>
-            <div style={{ marginBottom:14 }}>
-              <label style={{ fontSize:12, color:T.text3, display:'block', marginBottom:6 }}>Email</label>
-              <input
-                autoFocus
-                type="email"
-                value={inviteEmail}
-                onChange={e => setInviteEmail(e.target.value)}
-                placeholder="email@empresa.com"
-                style={{
-                  width:'100%', background:T.bgSurface2, border:`1px solid ${T.border2}`,
-                  borderRadius:8, color:T.text1, padding:'8px 12px', fontSize:13, outline:'none', boxSizing:'border-box',
-                }}
-              />
-            </div>
-            <div style={{ marginBottom:24 }}>
-              <label style={{ fontSize:12, color:T.text3, display:'block', marginBottom:6 }}>Papel</label>
-              <select
-                value={inviteRole}
-                onChange={e => setInviteRole(e.target.value as 'Admin'|'Member'|'Viewer')}
-                style={{
-                  width:'100%', background:T.bgSurface2, border:`1px solid ${T.border2}`,
-                  borderRadius:8, color:T.text1, padding:'8px 12px', fontSize:13, outline:'none',
-                }}
-              >
-                <option value="Admin">Admin</option>
-                <option value="Member">Member</option>
-                <option value="Viewer">Viewer</option>
-              </select>
-            </div>
-            <div style={{ display:'flex', gap:10 }}>
-              <button onClick={invite} style={{ flex:1, padding:'9px', borderRadius:8, border:'none', background:T.accent, color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer' }}>
-                Enviar convite
-              </button>
-              <button onClick={() => setInviteOpen(false)} style={{ padding:'9px 18px', borderRadius:8, border:`1px solid ${T.border2}`, background:'transparent', color:T.text2, fontSize:13, cursor:'pointer' }}>
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {toast.show && <Toast />}
-    </div>
-  )
-}
 
 function Toast() {
   return (
@@ -900,7 +735,6 @@ export default function ConfigPage() {
         {activeTab === 'labels'     && <LabelsTab />}
         {activeTab === 'priorities' && <PrioritiesTab />}
         {activeTab === 'board'      && <BoardConfigTab />}
-        {activeTab === 'members'    && <MembersTab />}
       </div>
     </div>
   )

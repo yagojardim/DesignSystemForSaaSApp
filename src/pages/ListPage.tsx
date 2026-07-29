@@ -4,6 +4,7 @@ import {
   ISSUES, EPICS, SPRINTS, STATUS_CFG, PRIORITY_CFG, TYPE_ICON, AV_COLOR,
   type Issue, type IssueStatus, type Priority,
 } from '../data/issues'
+import { WorkItemDetail, type WorkItemData } from '../components/WorkItemDetail'
 
 type SortKey = 'key' | 'title' | 'status' | 'priority' | 'assignee' | 'points' | 'epic' | 'sprint' | 'dueDate'
 type SortDir = 'asc' | 'desc'
@@ -39,6 +40,7 @@ export default function ListPage() {
   const [search, setSearch] = useState('')
   const [editCell, setEditCell] = useState<{key:string;col:ColId}|null>(null)
   const [overrides, setOverrides] = useState<Record<string,Partial<Issue>>>({})
+  const [selectedKey, setSelectedKey] = useState<string|null>(null)
   const colsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -73,6 +75,55 @@ export default function ListPage() {
   function setOverride(key: string, field: string, val: unknown) {
     setOverrides(prev => ({ ...prev, [key]: { ...prev[key], [field]: val } }))
   }
+
+  function issueToWID(issue: Issue): WorkItemData {
+    const epic   = EPICS.find(e => e.id === issue.epic)
+    const sprint = SPRINTS.find(s => s.id === issue.sprint)
+    return {
+      key:              issue.key,
+      type:             issue.type,
+      title:            issue.title,
+      status:           issue.status,
+      priority:         issue.priority,
+      labels:           issue.labels,
+      assigneeInitials: issue.assignee,
+      assigneeName:     issue.assignee,
+      points:           issue.points,
+      dueDate:          issue.dueDate,
+      blocked:          issue.blocked,
+      delayed:          issue.delayed,
+      epicKey:          epic?.id,
+      epicLabel:        epic?.label,
+      epicColor:        epic?.color,
+      sprintId:         sprint?.id,
+      sprintName:       sprint?.name,
+      availableEpics:   EPICS.map(e => ({ id: e.id, label: e.label, color: e.color })),
+      availableSprints: SPRINTS.map(s => ({ id: s.id, name: s.name })),
+      availableMembers: ASSIGNEES.map(a => ({ id: a, name: a, initials: a })),
+      availableLabels:  ['Design','Eng','Hero','Mobile','SEO','Auth','Backend','API','UX'],
+    }
+  }
+
+  function handleDetailUpdate(updated: WorkItemData) {
+    setOverrides(prev => ({
+      ...prev,
+      [updated.key]: {
+        ...prev[updated.key],
+        title:    updated.title,
+        status:   updated.status   as IssueStatus,
+        priority: updated.priority as Priority,
+        labels:   updated.labels,
+        assignee: updated.assigneeInitials,
+        points:   updated.points ?? 0,
+        epic:     updated.epicKey,
+        sprint:   updated.sprintId,
+      },
+    }))
+  }
+
+  const selectedIssue = selectedKey
+    ? issues.find(i => i.key === selectedKey) ?? null
+    : null
 
   function groupIssues(): { label: string; items: Issue[] }[] {
     if (groupBy === 'none') return [{ label: '', items: sorted }]
@@ -125,7 +176,26 @@ export default function ListPage() {
       cursor: 'pointer',
     }
 
-    if (col === 'key') return <div style={cellStyle}><span style={{color:T.accent,fontWeight:600,fontSize:12}}>{issue.key}</span></div>
+    if (col === 'key') return (
+      <div style={{ ...cellStyle, cursor: 'default' }}>
+        <button
+          onClick={() => setSelectedKey(issue.key)}
+          aria-label={`Abrir detalhe de ${issue.key}`}
+          style={{
+            background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+            color: T.accent, fontWeight: 600, fontSize: 12,
+            textDecoration: 'underline', textDecorationColor: `${T.accent}55`,
+            textUnderlineOffset: 3,
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.textDecorationColor = T.accent }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.textDecorationColor = `${T.accent}55` }}
+          onFocus={e => { (e.currentTarget as HTMLButtonElement).style.outline = `2px solid ${T.accent}` }}
+          onBlur={e => { (e.currentTarget as HTMLButtonElement).style.outline = 'none' }}
+        >
+          {issue.key}
+        </button>
+      </div>
+    )
     if (col === 'type') {
       const t = TYPE_ICON[issue.type]
       return <div style={{...cellStyle,justifyContent:'center'}}><span style={{color:t.color,fontSize:14}}>{t.icon}</span></div>
@@ -244,6 +314,7 @@ export default function ListPage() {
   }
 
   return (
+    <>
     <div style={{ background:T.bgPage, minHeight:'100vh', display:'flex', flexDirection:'column' }}>
       {/* Toolbar */}
       <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 20px', borderBottom:`1px solid ${T.border}`, background:T.bgSurface }}>
@@ -361,5 +432,15 @@ export default function ListPage() {
         </table>
       </div>
     </div>
+
+    {selectedIssue && (
+      <WorkItemDetail
+        data={issueToWID(selectedIssue)}
+        onUpdate={handleDetailUpdate}
+        onClose={() => setSelectedKey(null)}
+        mode="drawer"
+      />
+    )}
+    </>
   )
 }

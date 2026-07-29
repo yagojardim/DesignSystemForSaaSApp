@@ -4,6 +4,13 @@
  */
 import { useState, type ReactNode, type CSSProperties } from 'react'
 import { T } from './tokens'
+import { useSession } from '../../data/SessionContext'
+import { can } from '../../data/permissions'
+import {
+  WorkItemDetail,
+  type WorkItemData, type WIMember, type WISprint,
+} from '../WorkItemDetail'
+import { MOCK_USERS } from '../../data/session'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type RagStatus = 'healthy' | 'risk' | 'blocked'
@@ -386,22 +393,98 @@ export function SprintDonutCard({ sprintName, done, total, items, onOpen, onView
   )
 }
 
+// ─── WorkItem → WorkItemData adapter ─────────────────────────────────────────
+
+const AVAILABLE_MEMBERS: WIMember[] = MOCK_USERS.map(u => ({
+  id: u.user_id, initials: u.avatar_initials, name: u.name,
+}))
+
+const AVAILABLE_SPRINTS: WISprint[] = [
+  { id: 's13', name: 'Sprint 13' },
+  { id: 's14', name: 'Sprint 14' },
+  { id: 's15', name: 'Sprint 15' },
+]
+
+const AVAILABLE_LABELS  = ['Design','Web','Research','Content','Mobile','Eng','UX','SEO','Brand','Hero']
+const AVAILABLE_VERSIONS = ['v2.3.0','v2.4.0','v2.4.1','v2.5.0']
+
+const AVAILABLE_EPICS = [
+  { id:'EP-01', label:'Website Relaunch',    color:'#3B82F6' },
+  { id:'EP-02', label:'Infra & Eng',         color:'#F59E0B' },
+  { id:'EP-03', label:'Pesquisa & Conteúdo', color:'#A78BFA' },
+]
+
+function workItemToWID(item: WorkItem): WorkItemData {
+  return {
+    key:              item.key,
+    type:             item.type,
+    title:            item.title,
+    status:           item.status === 'blocked' ? 'in-progress' : item.status === 'ready' ? 'todo' : item.status === 'testing' ? 'in-review' : item.status === 'cancelled' ? 'done' : (item.status as string),
+    priority:         item.priority,
+    labels:           item.tags ?? [],
+    assigneeInitials: item.assignee?.initials ?? '',
+    assigneeName:     item.assignee?.name,
+    reporterInitials: item.reporter?.initials,
+    reporterName:     item.reporter?.name,
+    description:      item.description,
+    dueDate:          item.due_date,
+    points:           item.points,
+    sprintName:       item.sprint,
+    fixVersions:      [],
+    history:          [],
+    createdAt:        item.created_at ?? '—',
+    updatedAt:        '—',
+    availableEpics:   AVAILABLE_EPICS,
+    availableMembers: AVAILABLE_MEMBERS,
+    availableSprints: AVAILABLE_SPRINTS,
+    availableLabels:  AVAILABLE_LABELS,
+    availableVersions:AVAILABLE_VERSIONS,
+  }
+}
+
 // ─── WorkItemDetailDrawer ─────────────────────────────────────────────────────
 export function WorkItemDetailDrawer({ item, onClose, onNav }: {
   item: WorkItem; onClose: () => void; onNav?: (view: string) => void
 }) {
+  const { activeUser } = useSession()
+  const canEdit = can(activeUser.permissions, 'edit:workitem')
+  const [editing, setEditing] = useState(false)
+  const [wid, setWid] = useState<WorkItemData>(() => workItemToWID(item))
+
   const { label: statusLabel, color: statusColor } = statusConfig(item.status)
   const history = item.history ?? [
-    { when: 'há 5d', action: 'Issue criada',           by: item.reporter?.name ?? 'Sistema' },
+    { when: 'há 5d', action: 'Issue criada',              by: item.reporter?.name ?? 'Sistema' },
     { when: 'há 3d', action: `Movida para ${statusLabel}`, by: item.assignee?.name ?? '—' },
   ]
+
+  // When editing, render the full WorkItemDetail in drawer mode
+  if (editing) {
+    return (
+      <WorkItemDetail
+        mode="drawer"
+        data={wid}
+        onClose={() => setEditing(false)}
+        onUpdate={updated => {
+          setWid(updated)
+          // Sync tags back to item shape (best-effort — WorkItem is a dashboard view type)
+          item.title       = updated.title
+          item.priority    = updated.priority as WorkItem['priority']
+          item.assignee    = updated.assigneeInitials
+            ? { initials: updated.assigneeInitials, name: updated.assigneeName ?? updated.assigneeInitials, color: '#3B82F6' }
+            : item.assignee
+          item.points      = updated.points
+          item.description = updated.description
+          item.due_date    = updated.dueDate
+          item.tags        = updated.labels
+        }}
+      />
+    )
+  }
+
   return (
     <>
       {/* Overlay */}
-      <div
-        onClick={onClose}
-        style={{ position: 'fixed', inset: 0, background: T.bgOverlay, zIndex: 900 }}
-      />
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: T.bgOverlay, zIndex: 900 }} />
       {/* Drawer */}
       <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0, width: 420,
@@ -430,16 +513,16 @@ export function WorkItemDetailDrawer({ item, onClose, onNav }: {
         </div>
         {/* Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '18px 18px' }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: T.text1, margin: 0, marginBottom: 14, lineHeight: 1.4 }}>{item.title}</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: T.text1, margin: 0, marginBottom: 14, lineHeight: 1.4 }}>{wid.title}</h2>
           {/* Metadata grid */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', marginBottom: 16 }}>
             {[
-              { label: 'Responsável', value: item.assignee?.name ?? '—' },
-              { label: 'Reporter',    value: item.reporter?.name ?? '—' },
-              { label: 'Prioridade',  value: item.priority.charAt(0).toUpperCase() + item.priority.slice(1) },
-              { label: 'Sprint',      value: item.sprint ?? '—' },
-              { label: 'Estimativa',  value: item.points ? `${item.points}pt` : '—' },
-              { label: 'Prazo',       value: item.due_date ?? '—' },
+              { label: 'Responsável', value: (wid.assigneeName ?? wid.assigneeInitials) || '—' },
+              { label: 'Reporter',    value: wid.reporterName ?? wid.reporterInitials ?? '—' },
+              { label: 'Prioridade',  value: wid.priority.charAt(0).toUpperCase() + wid.priority.slice(1) },
+              { label: 'Sprint',      value: wid.sprintName ?? '—' },
+              { label: 'Estimativa',  value: wid.points ? `${wid.points}pt` : '—' },
+              { label: 'Prazo',       value: wid.dueDate ?? '—' },
             ].map(m => (
               <div key={m.label}>
                 <div style={{ fontSize: 10, color: T.text3, marginBottom: 2 }}>{m.label}</div>
@@ -448,16 +531,16 @@ export function WorkItemDetailDrawer({ item, onClose, onNav }: {
             ))}
           </div>
           {/* Tags */}
-          {item.tags && item.tags.length > 0 && (
+          {wid.labels && wid.labels.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 14 }}>
-              {item.tags.map(t => <ConditionalTag key={t} label={t} severity="neutral" />)}
+              {wid.labels.map(t => <ConditionalTag key={t} label={t} severity="neutral" />)}
             </div>
           )}
           {/* Description */}
           <div style={{ background: T.bgPage, borderRadius: 8, padding: 12, marginBottom: 16 }}>
             <div style={{ fontSize: 11, color: T.text3, marginBottom: 6 }}>Descrição</div>
             <p style={{ fontSize: 12, color: T.text2, lineHeight: 1.6, margin: 0 }}>
-              {item.description ?? 'Nenhuma descrição adicionada.'}
+              {wid.description ?? 'Nenhuma descrição adicionada.'}
             </p>
           </div>
           {/* History */}
@@ -477,9 +560,22 @@ export function WorkItemDetailDrawer({ item, onClose, onNav }: {
         </div>
         {/* Footer */}
         <div style={{ padding: '12px 18px', borderTop: `1px solid ${T.border}`, display: 'flex', gap: 8, flexShrink: 0 }}>
-          <button style={{ flex: 1, padding: '8px 0', borderRadius: 7, border: 'none', background: T.accent, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-            Editar issue
-          </button>
+          {canEdit ? (
+            <button
+              onClick={() => setEditing(true)}
+              style={{ flex: 1, padding: '8px 0', borderRadius: 7, border: 'none', background: T.accent, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+            >
+              Editar issue
+            </button>
+          ) : (
+            <button
+              disabled
+              title="Requer permissão para editar (edit:workitem)"
+              style={{ flex: 1, padding: '8px 0', borderRadius: 7, border: `1px solid ${T.border}`, background: 'transparent', color: T.text3, fontSize: 12, cursor: 'not-allowed' }}
+            >
+              Editar issue
+            </button>
+          )}
           <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 7, border: `1px solid ${T.border}`, background: 'none', color: T.text2, fontSize: 12, cursor: 'pointer' }}>
             Fechar
           </button>

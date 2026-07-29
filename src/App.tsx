@@ -28,6 +28,7 @@ import DashboardHomePage from './pages/DashboardHomePage'
 import TeamPage from './pages/TeamPage'
 import MyTasksPage from './pages/MyTasksPage'
 import RoleDashboard from './pages/RoleDashboard'
+import ClientMessagesPage from './pages/ClientMessagesPage'
 import { MOCK_USERS } from './data/session'
 import InviteMemberModal from './components/InviteMemberModal'
 
@@ -36,7 +37,7 @@ const ALL_VIEWS: View[] = [
   'list','timeline','epics','releases','filters','navigator',
   'reports','automations','config','team','my-tasks',
   'issue','client','task-drawer',
-  'login','role-dashboard','client-access','client-login',
+  'login','role-dashboard','client-access','client-login','client-messages',
 ]
 
 export const VIEW_LABELS: Record<View, string> = {
@@ -49,6 +50,7 @@ export const VIEW_LABELS: Record<View, string> = {
   issue:'Issue Detail', client:'Portal Cliente', 'task-drawer':'Task Drawer',
   login:'Login — Gestão', 'role-dashboard':'Dashboard por Papel',
   'client-access':'Criar Acesso de Cliente', 'client-login':'Login — Portal',
+  'client-messages':'Mensagens do Cliente',
 }
 
 export default function App() {
@@ -62,6 +64,7 @@ export default function App() {
 function AppInner() {
   const { setActiveUser } = useSession()
   const [view, setView] = useState<View>('home')
+  const [clientMustChangePwd, setClientMustChangePwd] = useState(false)
 
   if (view === 'login') {
     return (
@@ -82,7 +85,10 @@ function AppInner() {
   if (view === 'client-login') {
     return (
       <ClientLoginPage
-        onSuccess={(_permission) => setView('client')}
+        onSuccess={(_permission, mustChangePassword) => {
+          setClientMustChangePwd(mustChangePassword)
+          setView('client')
+        }}
         onBack={() => setView('home')}
       />
     )
@@ -92,7 +98,6 @@ function AppInner() {
     return (
       <ClientAccessPage
         onBack={() => setView('home')}
-        onGoToPortal={() => setView('client')}
       />
     )
   }
@@ -100,15 +105,6 @@ function AppInner() {
   if (view === 'foundations') {
     return (
       <div className="h-screen overflow-hidden flex flex-col" style={{ background:'var(--bg-page)' }}>
-        <div className="flex items-center gap-0.5 px-4 py-1.5 overflow-x-auto flex-shrink-0" style={{ background:'#F0F4FF', borderBottom:'1px solid #E6EBF2' }}>
-          <span className="text-[9px] font-semibold text-[#2F6BFF] uppercase tracking-wider mr-2 flex-shrink-0">Protótipo:</span>
-          {ALL_VIEWS.map(v => (
-            <button key={v} onClick={()=>setView(v)} className="flex-shrink-0 px-2.5 py-1 rounded text-[11px] font-medium transition-all"
-              style={{ background:view===v?'#2F6BFF':'transparent', color:view===v?'#fff':'#2F6BFF' }}>
-              {VIEW_LABELS[v]}
-            </button>
-          ))}
-        </div>
         <div className="flex-1 overflow-y-auto"><FoundationsPage /></div>
       </div>
     )
@@ -117,15 +113,9 @@ function AppInner() {
   if (view === 'client') {
     return (
       <div className="fixed inset-0 flex flex-col" style={{ background:'#0e1016' }}>
-        <div className="flex items-center gap-1 px-4 py-1.5 flex-shrink-0 overflow-x-auto" style={{ background:'#0a0d12', borderBottom:'1px solid #1c2434' }}>
-          {ALL_VIEWS.map(v => (
-            <button key={v} onClick={()=>setView(v)} className="px-2.5 py-1 rounded text-[10px] font-medium transition-all flex-shrink-0"
-              style={{ background:view===v?'#7d92ff':'transparent', color:view===v?'#fff':'#6a7390' }}>
-              {VIEW_LABELS[v]}
-            </button>
-          ))}
+        <div className="flex-1 overflow-hidden">
+          <ClientPortalPage mustChangePassword={clientMustChangePwd} onPasswordChanged={() => setClientMustChangePwd(false)} />
         </div>
-        <div className="flex-1 overflow-hidden"><ClientPortalPage /></div>
       </div>
     )
   }
@@ -169,7 +159,8 @@ function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void })
         {view==='project'       && <div className="h-full overflow-hidden dark-shell"><ProjectPage/></div>}
         {view==='issue'         && <div className="h-full overflow-hidden dark-shell"><IssueDetailPage/></div>}
         {view==='task-drawer'   && <div className="h-full overflow-hidden dark-shell"><TaskDrawerPage/></div>}
-        {view==='role-dashboard' && <div className="h-full dark-shell"><RoleDashboard onBack={() => setView('home')} /></div>}
+        {view==='role-dashboard'    && <div className="h-full dark-shell"><RoleDashboard onBack={() => setView('home')} /></div>}
+        {view==='client-messages'  && <div className="h-full overflow-hidden dark-shell"><ClientMessagesPage /></div>}
       </Shell>
     </>
   )

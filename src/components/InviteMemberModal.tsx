@@ -5,6 +5,7 @@ import {
   derivePermissions, getCompatibleDashboards, DEFAULT_DASHBOARD,
   capabilityVisibility, STEP4_CAPABILITIES, type Capability,
 } from '../data/permissions'
+import { generateTempPassword, markPasswordMustChange } from '../data/security'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const AVATAR_COLORS = ['#3B82F6','#10B981','#F59E0B','#EF4444','#6366F1','#A78BFA','#34d399','#f5a524','#e879f9','#60a5fa']
@@ -89,7 +90,7 @@ interface Props {
   onSuccess?: (user: MockUser) => void
 }
 
-const TOTAL_STEPS = 6
+const TOTAL_STEPS = 7
 
 export default function InviteMemberModal({ onClose, onSuccess }: Props) {
   // Step state
@@ -120,6 +121,10 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
 
   // Step 6 — status
   const [status, setStatus] = useState<'active' | 'invited'>('invited')
+
+  // Step 6 (confirmation) — generated password shown once
+  const [generatedPwd, setGeneratedPwd] = useState('')
+  const [pwdCopied, setPwdCopied] = useState(false)
 
   // ── Auto-configure on role select ──────────────────────────────────────────
   function selectRole(r: RoleContext) {
@@ -174,7 +179,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
     }
   }
 
-  // ── Submit ─────────────────────────────────────────────────────────────────
+  // ── Submit (step 5 → step 6) ───────────────────────────────────────────────
   function handleSubmit() {
     if (!role || !defaultDash) return
 
@@ -194,6 +199,8 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
       })),
     ]
 
+    const pwd = generateTempPassword()
+
     const user: MockUser = {
       user_id: newId,
       tenant_id: MOCK_TENANT.tenant_id,
@@ -207,11 +214,25 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
       modules_enabled: modules,
       permissions: derivePermissions(role, [...optIns]),
       assigned_dashboards: dashes,
+      password_must_change: true,
     }
 
     addMockUser(user)
+    markPasswordMustChange(newId)
+    setGeneratedPwd(pwd)
+    setStep(6)
     onSuccess?.(user)
+  }
+
+  function handleFinish() {
+    setGeneratedPwd('')
     onClose()
+  }
+
+  function copyPwd() {
+    navigator.clipboard.writeText(generatedPwd).catch(() => {})
+    setPwdCopied(true)
+    setTimeout(() => setPwdCopied(false), 2000)
   }
 
   const compatibleDashes = role ? getCompatibleDashboards(role) : []
@@ -224,6 +245,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
     'Permissões condicionais',
     'Vínculos',
     'Status inicial',
+    'Senha temporária',
   ]
 
   return (
@@ -613,6 +635,75 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
               </div>
             </div>
           )}
+          {/* ── Step 6: Senha temporária (exibida uma única vez) ─── */}
+          {step === 6 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: 99, background: avatarColor,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 16, fontWeight: 700, color: '#fff', flexShrink: 0,
+                }}>
+                  {initials(fullName || 'NM')}
+                </div>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: T.text1 }}>{fullName}</div>
+                  <div style={{ fontSize: 11, color: T.text3 }}>{email}</div>
+                </div>
+                <div style={{
+                  marginLeft: 'auto', fontSize: 10, fontWeight: 600, padding: '3px 10px',
+                  borderRadius: 20, background: `${T.success}18`, border: `1px solid ${T.success}40`,
+                  color: T.success,
+                }}>
+                  Membro criado ✓
+                </div>
+              </div>
+
+              {/* Password block */}
+              <div style={{
+                background: T.bgPage,
+                borderTop:    `1px solid ${T.border}`,
+                borderRight:  `1px solid ${T.border}`,
+                borderBottom: `1px solid ${T.border}`,
+                borderLeft:   `4px solid ${T.accent}`,
+                borderRadius: 10, padding: 20,
+              }}>
+                <div style={{ fontSize: 11, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
+                  Senha temporária gerada
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{
+                    fontFamily: 'monospace', fontSize: 18, color: T.accent,
+                    letterSpacing: '0.12em', userSelect: 'all', flex: 1,
+                  }}>
+                    {generatedPwd}
+                  </span>
+                  <button onClick={copyPwd} style={{
+                    background: pwdCopied ? `${T.success}18` : `${T.accent}18`,
+                    border: `1px solid ${pwdCopied ? T.success : T.accentBorder}`,
+                    color: pwdCopied ? T.success : T.accent,
+                    borderRadius: 6, padding: '6px 14px', fontSize: 12, cursor: 'pointer', flexShrink: 0,
+                  }}>
+                    {pwdCopied ? '✓ Copiado!' : '📋 Copiar'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Warning */}
+              <div style={{
+                background: `${T.warn}0D`, border: `1px solid ${T.warn}40`,
+                borderRadius: 10, padding: '14px 16px', fontSize: 12, color: T.text2, lineHeight: 1.7,
+              }}>
+                <div style={{ fontWeight: 600, color: T.warn, marginBottom: 6 }}>⚠ Exibida uma única vez</div>
+                <ul style={{ margin: 0, paddingLeft: 16, color: T.text2 }}>
+                  <li>Copie e envie a senha por canal seguro para <strong style={{ color: T.text1 }}>{email}</strong>.</li>
+                  <li>O membro deverá alterar a senha no primeiro acesso.</li>
+                  <li>Após fechar este painel, a senha não será reexibida.</li>
+                  <li style={{ color: T.text3, fontSize: 11, marginTop: 4 }}>Inspection Mode — senha demonstrativa, sem hash real.</li>
+                </ul>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -622,18 +713,24 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           flexShrink: 0,
         }}>
-          <button onClick={() => step === 0 ? onClose() : setStep(s => s - 1)} style={{
-            padding: '8px 18px', borderRadius: 7, border: `1px solid ${T.border}`,
-            background: 'none', color: T.text2, fontSize: 12, cursor: 'pointer',
-          }}>
-            {step === 0 ? 'Cancelar' : '← Voltar'}
-          </button>
+          {step < 6 ? (
+            <button onClick={() => step === 0 ? onClose() : setStep(s => s - 1)} style={{
+              padding: '8px 18px', borderRadius: 7, border: `1px solid ${T.border}`,
+              background: 'none', color: T.text2, fontSize: 12, cursor: 'pointer',
+            }}>
+              {step === 0 ? 'Cancelar' : '← Voltar'}
+            </button>
+          ) : (
+            <div />
+          )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 10, color: T.text3 }}>
-              {step + 1}/{TOTAL_STEPS}
-            </span>
-            {step < TOTAL_STEPS - 1 ? (
+            {step < 6 && (
+              <span style={{ fontSize: 10, color: T.text3 }}>
+                {step + 1}/{TOTAL_STEPS}
+              </span>
+            )}
+            {step < 5 ? (
               <button
                 onClick={() => canAdvance() && setStep(s => s + 1)}
                 disabled={!canAdvance()}
@@ -646,13 +743,20 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
               >
                 Próximo →
               </button>
-            ) : (
+            ) : step === 5 ? (
               <button onClick={handleSubmit} style={{
                 padding: '8px 22px', borderRadius: 7, border: 'none', cursor: 'pointer',
                 background: status === 'active' ? T.success : T.accent,
                 color: '#fff', fontSize: 12, fontWeight: 600,
               }}>
                 {status === 'active' ? '✓ Criar perfil' : '✉ Enviar convite'}
+              </button>
+            ) : (
+              <button onClick={handleFinish} style={{
+                padding: '8px 22px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                background: T.success, color: '#fff', fontSize: 12, fontWeight: 600,
+              }}>
+                ✓ Concluir e fechar
               </button>
             )}
           </div>

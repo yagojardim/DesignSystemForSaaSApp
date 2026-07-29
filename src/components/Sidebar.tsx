@@ -67,8 +67,9 @@ const ALL_GROUPS: NavGroup[] = [
     items: [
       { id: 'config',        label: 'Configurações',        icon: ConfigIcon, cap: 'users:manage' },
       { id: 'automations',   label: 'Automações',           icon: AutomIcon,  cap: 'users:manage' },
-      { id: 'client-access', label: 'Criar acesso cliente', icon: AccessIcon, cap: 'access:client-portal' },
-      { id: 'client',        label: 'Portal do Cliente',    icon: ClientIcon, cap: 'access:client-portal' },
+      { id: 'client-access',    label: 'Criar acesso cliente',    icon: AccessIcon, cap: 'access:client-portal' },
+      { id: 'client',           label: 'Portal do Cliente',       icon: ClientIcon, cap: 'access:client-portal' },
+      { id: 'client-messages',  label: 'Mensagens do Cliente',    icon: ChatIcon },
     ],
   },
   {
@@ -84,14 +85,14 @@ const ALL_GROUPS: NavGroup[] = [
 
 // ─── Role → nav item ids map ──────────────────────────────────────────────────
 const ROLE_NAV_MAP: Record<RoleContext, string[]> = {
-  Admin:          ['home','my-tasks','calendar','projects-list','project','list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','config','automations','client-access','client','team','login','client-login'],
-  PMO:            ['home','calendar','projects-list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','client'],
-  ProjectManager: ['home','my-tasks','calendar','projects-list','project','list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','client'],
+  Admin:          ['home','my-tasks','calendar','projects-list','project','list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','config','automations','client-access','client','client-messages','team','login','client-login'],
+  PMO:            ['home','calendar','projects-list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','client','client-messages'],
+  ProjectManager: ['home','my-tasks','calendar','projects-list','project','list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','client','client-messages'],
   ProductManager: ['home','calendar','projects-list','dashboard','epics','releases','reports','filters','navigator'],
-  ProductOwner:   ['home','my-tasks','calendar','projects-list','project','list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','client','client-access'],
-  ScrumMaster:    ['home','my-tasks','calendar','projects-list','project','list','gantt','timeline','filters','navigator','reports'],
-  TechLead:       ['home','my-tasks','calendar','projects-list','project','list','gantt','filters','navigator','reports'],
-  Dev:            ['home','my-tasks','calendar','projects-list','project','list','filters','navigator'],
+  ProductOwner:   ['home','my-tasks','calendar','projects-list','project','list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','client','client-access','client-messages'],
+  ScrumMaster:    ['home','my-tasks','calendar','projects-list','project','list','gantt','timeline','filters','navigator','reports','client-messages'],
+  TechLead:       ['home','my-tasks','calendar','projects-list','project','list','gantt','filters','navigator','reports','client-messages'],
+  Dev:            ['home','my-tasks','calendar','projects-list','project','list','filters','navigator','client-messages'],
   UX:             ['home','my-tasks','calendar','projects-list','project','list','filters','navigator'],
   QA:             ['home','my-tasks','calendar','projects-list','project','list','filters','navigator'],
 }
@@ -890,6 +891,7 @@ function NavIcon()     { return <svg width="14" height="14" viewBox="0 0 14 14" 
 function AccessIcon()  { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 7a2 2 0 1 0-4 0 2 2 0 0 0 4 0z" stroke="currentColor" strokeWidth="1.2"/><path d="M7 1v2M7 11v2M1 7h2M11 7h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg> }
 function LoginIcon()   { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M8 2H11C11.6 2 12 2.4 12 3V11C12 11.6 11.6 12 11 12H8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M5 4.5L8 7L5 9.5M8 7H2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg> }
 function PortalIcon()  { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.2"/><path d="M5 7h4M7 5l2 2-2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg> }
+function ChatIcon()    { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H5l-3 2V3a1 1 0 0 1 1-1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg> }
 function ReportsIcon()    { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 11V7M5 11V5M8 11V3M11 11V6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg> }
 function AutomIcon()      { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5l-5 7h5l-1 4 5-7H6l1-4z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg> }
 function ConfigIcon()     { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="2" stroke="currentColor" strokeWidth="1.2"/><path d="M7 1v2M7 11v2M1 7h2M11 7h2M2.9 2.9l1.4 1.4M9.7 9.7l1.4 1.4M9.7 4.3L11.1 2.9M2.9 11.1l1.4-1.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg> }

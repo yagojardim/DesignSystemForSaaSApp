@@ -3,7 +3,7 @@ import { useSession } from '../data/SessionContext'
 import { T } from '../components/ds/tokens'
 import {
   KpiCard, RagCard, ProgressCard, WorkQueue, SprintDonutCard,
-  WorkItemDetailDrawer, FilterBar, DashboardSwitcher,
+  WorkItemDetailDrawer, FilterBar,
   SCard, ProgressBar, StatusBadge, ConditionalTag, Av,
   AuditFeed, ActivityTimeline, EmptyState, LoadingState,
   type WorkItem, type FilterState, type RagStatus,
@@ -19,9 +19,10 @@ import {
 } from '../data/workItems'
 import {
   getAllForPo, getUnreadForPo, markReadByPo, markAllReadByPo,
-  type ClientSignal,
+  addPoReply, getSignalsForTenant, getUnreadCountForTenant, type ClientSignal,
 } from '../data/clientSignals'
 import { getAssignedCards, ASSIGNMENT_TARGETS, type AssignmentTarget } from '../data/dashboardAssignments'
+import { REPORT_REGISTRY, ReportChartModal, useChartModal } from '../data/reportRegistry'
 
 // ─── Shared hook: drawer + nav + filter state ─────────────────────────────────
 function useDrawer() {
@@ -161,6 +162,7 @@ function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer: openPmoDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
   const blocked = applyFilters(getBlockedItems(), filters)
+  const { openChart, chartModal } = useChartModal()
 
   const rags: { name: string; squad: string; rag: RagStatus; pct: number; days: string; reason?: string }[] = [
     { name: 'Website Relaunch', squad: 'Growth',   rag: 'healthy', pct: 68, days: '42d restantes' },
@@ -171,12 +173,13 @@ function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
 
   return (
     <>
+      {chartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <Grid cols="repeat(4,1fr)">
         <KpiCard value="4"   label="Projetos Ativos"      sub="2 no prazo"   onClick={() => onNav('projects-list')} />
         <KpiCard value="2"   label="Em Risco / Atrasados" sub="1 crítico"    color={T.warn} alert onClick={() => onNav('reports')} />
-        <KpiCard value="71%" label="Previsibilidade"      sub="meta: 80%"    onClick={() => onNav('reports')} />
-        <KpiCard value="67%" label="Planejado × Concluído" sub="Q2 2025"    onClick={() => onNav('reports')} />
+        <KpiCard value="71%" label="Previsibilidade"      sub="meta: 80%"    onClick={() => openChart('velocity')} />
+        <KpiCard value="67%" label="Planejado × Concluído" sub="Q2 2025"    onClick={() => openChart('criados')} />
       </Grid>
 
       <div style={{ marginTop: 12 }}>
@@ -199,6 +202,10 @@ function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
         <ColSpan>
           <ProgressCard pct={67} label="Ritmo de Entrega — Portfólio" velocity="Velocity média: 38pt/sprint" onClick={() => onNav('reports')} />
         </ColSpan>
+
+        <ColSpan>
+          <ClientFeedCard tenantId={MOCK_TENANT.tenant_id} />
+        </ColSpan>
       </Grid>
     </>
   )
@@ -210,6 +217,7 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
   const [filters, setFilters] = useFilters()
   const sprint14 = applyFilters(getSprintItems('Sprint 14', 'proj_001'), filters)
   const blocked  = applyFilters(getBlockedItems('proj_001'), filters)
+  const { openChart, chartModal } = useChartModal()
 
   const team = [
     { name: 'Ana Lima',     i: 'AL', c: '#fb923c', ativas: 4, cap: 5 },
@@ -220,12 +228,13 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
 
   return (
     <>
+      {chartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <Grid cols="repeat(4,1fr)">
-        <KpiCard value="72%" label="Progresso do Projeto" sub="Sprint 14 ativo" onClick={() => onNav('reports')} />
+        <KpiCard value="72%" label="Progresso do Projeto" sub="Sprint 14 ativo" onClick={() => openChart('burndown')} />
         <KpiCard value="18d" label="Prazo Restante"       sub="Entrega: 28 ago" onClick={() => onNav('gantt')} />
-        <KpiCard value="2"   label="Bloqueios Ativos"     sub="1 crítico" color={T.crit} alert onClick={() => onNav('list')} />
-        <KpiCard value="+12%" label="Risco de Escopo"     sub="vs planejamento" color={T.warn} alert onClick={() => onNav('reports')} />
+        <KpiCard value={String(blocked.length)} label="Bloqueios Ativos" sub="ver lista" color={T.crit} alert onClick={() => onNav('list')} />
+        <KpiCard value="+12%" label="Risco de Escopo"     sub="vs planejamento" color={T.warn} alert onClick={() => openChart('criados')} />
       </Grid>
 
       <div style={{ marginTop: 12 }}>
@@ -235,7 +244,7 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
       <Grid cols="1fr 1fr">
         <RagCard name="Website Relaunch" squad="Growth · Sprint 14" rag="risk" pct={72} daysLabel="18d restantes" reason="Escopo +12% — replanejamento necessário" onClick={() => onNav('project')} />
 
-        <ProgressCard pct={67} label="Planejado × Concluído" velocity="Sprint 14 — 38pt concluídos" onClick={() => onNav('reports')} />
+        <ProgressCard pct={67} label="Planejado × Concluído" velocity="Sprint 14 — 38pt concluídos" onClick={() => openChart('criados')} />
 
         <SprintDonutCard sprintName="Sprint 14" done={28} total={38} items={sprint14} onOpen={openDrawer} onViewSprint={() => onNav('project')} />
 
@@ -259,6 +268,10 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
               ))}
             </div>
           </SCard>
+        </ColSpan>
+
+        <ColSpan>
+          <ClientFeedCard tenantId={MOCK_TENANT.tenant_id} />
         </ColSpan>
       </Grid>
     </>
@@ -351,92 +364,201 @@ function ProductManagerPanel({ onNav }: { onNav: (v: string) => void }) {
   )
 }
 
-// ─── Client Feed Card (PO-only) ───────────────────────────────────────────────
-function ClientFeedCard({ poId, tenantId }: { poId: string; tenantId: string }) {
-  const [tick, setTick] = useState(0)
-  const signals  = getAllForPo(poId, tenantId)
-  const unread   = getUnreadForPo(poId, tenantId)
+// ─── Client Feed Card (PO and all management roles) ──────────────────────────
+function ClientFeedCard({ poId, tenantId }: { poId?: string; tenantId: string }) {
+  const { activeUser } = useSession()
+  const [tick,       setTick]       = useState(0)
+  const [openReply,  setOpenReply]  = useState<string | null>(null)
+  const [replyText,  setReplyText]  = useState('')
+  const [toast,      setToast]      = useState<string | null>(null)
+
+  void tick
+
+  const signals = poId ? getAllForPo(poId, tenantId) : getSignalsForTenant(tenantId)
+  const unread  = poId ? getUnreadForPo(poId, tenantId) : signals.filter(s => !s.read_by_po)
+  const canReply = true  // any authorized manager can reply
 
   function handleMarkAllRead() {
-    markAllReadByPo(poId, tenantId)
+    if (poId) markAllReadByPo(poId, tenantId)
+    else signals.forEach(s => markReadByPo(s.id))
     setTick(t => t + 1)
   }
 
-  // tick used to force re-render after mark-read mutations
-  void tick
+  function handleRowClick(s: ClientSignal) {
+    markReadByPo(s.id)
+    setTick(t => t + 1)
+    if (openReply === s.id) {
+      setOpenReply(null)
+      setReplyText('')
+    } else {
+      setOpenReply(s.id)
+      setReplyText('')
+    }
+  }
+
+  function handleSend(s: ClientSignal) {
+    if (!replyText.trim()) return
+    addPoReply(s.id, replyText.trim(), activeUser.name)
+    setTick(t => t + 1)
+    setOpenReply(null)
+    setReplyText('')
+    setToast('Resposta enviada')
+    setTimeout(() => setToast(null), 2500)
+  }
 
   const TYPE_ICON: Record<ClientSignal['type'], string> = { comment: '💬', approval: '✓' }
   const TYPE_COLOR: Record<ClientSignal['type'], string> = { comment: T.accent, approval: T.success }
 
   return (
-    <SCard
-      title="Mensagens do Cliente"
-      action={unread.length > 0 ? (
-        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-          <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:99, background:T.crit, color:'#fff' }}>
-            {unread.length} novo{unread.length > 1 ? 's' : ''}
-          </span>
-          <button
-            onClick={handleMarkAllRead}
-            style={{ fontSize:10, color:T.text3, cursor:'pointer', background:'none', border:'none', padding:0 }}
-            onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.color=T.accent}}
-            onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.color=T.text3}}
-          >
-            Lidas
-          </button>
-        </div>
-      ) : undefined}
-    >
-      {signals.length === 0 ? (
-        <p style={{ fontSize:12, color:T.text3, textAlign:'center', padding:'12px 0' }}>Nenhuma mensagem do cliente.</p>
-      ) : (
-        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-          {signals.slice(0, 5).map(s => (
-            <div
-              key={s.id}
-              onClick={() => { markReadByPo(s.id); setTick(t => t + 1) }}
-              style={{
-                display:'flex', alignItems:'flex-start', gap:8,
-                padding:'8px 10px', borderRadius:8, cursor:'pointer',
-                background: !s.read_by_po ? `${T.accent}08` : T.bgPage,
-                border:`1px solid ${!s.read_by_po ? T.accent + '30' : T.border}`,
-                borderLeft:`3px solid ${TYPE_COLOR[s.type]}`,
-                transition:'background 0.15s',
-              }}
-              onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background=T.bgSurface2}}
-              onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.background=!s.read_by_po?`${T.accent}08`:T.bgPage}}
-            >
-              <span style={{ fontSize:13, flexShrink:0, marginTop:1 }}>{TYPE_ICON[s.type]}</span>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
-                  <span style={{ fontSize:11, fontWeight:600, color:T.text1 }}>{s.author}</span>
-                  <span style={{ fontSize:9, fontWeight:700, padding:'1px 5px', borderRadius:99, color:TYPE_COLOR[s.type], background:`${TYPE_COLOR[s.type]}18` }}>
-                    {s.type === 'comment' ? 'comentário' : 'aprovação'}
-                  </span>
-                  {!s.read_by_po && <span style={{ width:6, height:6, borderRadius:'50%', background:T.crit, flexShrink:0 }} />}
-                </div>
-                {s.body && (
-                  <p style={{ fontSize:11, color:T.text2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:260 }}>
-                    {s.body}
-                  </p>
-                )}
-                <p style={{ fontSize:9, color:T.text3, marginTop:2 }}>
-                  {s.item_title} · {s.project}
-                </p>
-              </div>
-              <span style={{ fontSize:9, color:T.text3, flexShrink:0, marginTop:2 }}>
-                {new Date(s.created_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'short' })}
-              </span>
-            </div>
-          ))}
-          {signals.length > 5 && (
-            <p style={{ fontSize:10, color:T.text3, textAlign:'center', paddingTop:4 }}>
-              + {signals.length - 5} mais mensagem{signals.length - 5 > 1 ? 's' : ''}
-            </p>
-          )}
+    <>
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)',
+          background:T.success, color:'#fff', fontSize:12, fontWeight:600,
+          padding:'8px 18px', borderRadius:8, boxShadow:T.shadowModal, zIndex:9999,
+        }}>
+          {toast}
         </div>
       )}
-    </SCard>
+      <SCard
+        title="Mensagens do Cliente"
+        action={unread.length > 0 ? (
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:99, background:T.crit, color:'#fff' }}>
+              {unread.length} novo{unread.length > 1 ? 's' : ''}
+            </span>
+            <button
+              onClick={handleMarkAllRead}
+              style={{ fontSize:10, color:T.text3, cursor:'pointer', background:'none', border:'none', padding:0 }}
+              onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.color=T.accent}}
+              onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.color=T.text3}}
+            >
+              Lidas
+            </button>
+          </div>
+        ) : undefined}
+      >
+        {signals.length === 0 ? (
+          <p style={{ fontSize:12, color:T.text3, textAlign:'center', padding:'12px 0' }}>Nenhuma mensagem do cliente.</p>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+            {signals.slice(0, 5).map(s => (
+              <div key={s.id}>
+                {/* Signal row */}
+                <div
+                  onClick={() => handleRowClick(s)}
+                  style={{
+                    display:'flex', alignItems:'flex-start', gap:8,
+                    padding:'8px 10px',
+                    borderRadius: openReply === s.id ? '8px 8px 0 0' : 8,
+                    cursor:'pointer',
+                    background: !s.read_by_po ? `${T.accent}08` : T.bgPage,
+                    borderTop:`1px solid ${!s.read_by_po ? T.accent + '30' : T.border}`,
+                    borderRight:`1px solid ${!s.read_by_po ? T.accent + '30' : T.border}`,
+                    borderBottom: openReply === s.id ? 'none' : `1px solid ${!s.read_by_po ? T.accent + '30' : T.border}`,
+                    borderLeft:`3px solid ${TYPE_COLOR[s.type]}`,
+                    transition:'background 0.15s',
+                  }}
+                  onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background=T.bgSurface2}}
+                  onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.background=!s.read_by_po?`${T.accent}08`:T.bgPage}}
+                >
+                  <span style={{ fontSize:13, flexShrink:0, marginTop:1 }}>{TYPE_ICON[s.type]}</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
+                      <span style={{ fontSize:11, fontWeight:600, color:T.text1 }}>{s.author}</span>
+                      <span style={{ fontSize:9, fontWeight:700, padding:'1px 5px', borderRadius:99, color:TYPE_COLOR[s.type], background:`${TYPE_COLOR[s.type]}18` }}>
+                        {s.type === 'comment' ? 'comentário' : 'aprovação'}
+                      </span>
+                      {!s.read_by_po && <span style={{ width:6, height:6, borderRadius:'50%', background:T.crit, flexShrink:0 }} />}
+                    </div>
+                    {s.body && (
+                      <p style={{ fontSize:11, color:T.text2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:260 }}>
+                        {s.body}
+                      </p>
+                    )}
+                    {s.po_reply && (
+                      <p style={{ fontSize:10, color:T.success, marginTop:3, fontStyle:'italic' }}>
+                        ↳ Você: {s.po_reply}
+                      </p>
+                    )}
+                    <p style={{ fontSize:9, color:T.text3, marginTop:2 }}>
+                      {s.item_title} · {s.project}
+                    </p>
+                  </div>
+                  <span style={{ fontSize:9, color:T.text3, flexShrink:0, marginTop:2 }}>
+                    {new Date(s.created_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'short' })}
+                  </span>
+                </div>
+
+                {/* Inline reply panel */}
+                {openReply === s.id && (
+                  <div style={{
+                    padding:'10px 10px 10px',
+                    borderTop:`1px solid ${T.border}`,
+                    borderRight:`1px solid ${T.border}`,
+                    borderBottom:`1px solid ${T.border}`,
+                    borderLeft:`3px solid ${TYPE_COLOR[s.type]}`,
+                    borderRadius:'0 0 8px 8px',
+                    background: T.bgSurface2,
+                  }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <>
+                      <textarea
+                        value={replyText}
+                        onChange={e => setReplyText(e.target.value)}
+                        placeholder="Escreva sua resposta ao cliente..."
+                        rows={2}
+                        style={{
+                          width:'100%', resize:'none', fontSize:11, color:T.text1,
+                          background:T.bgPage, border:`1px solid ${T.border}`,
+                          borderRadius:6, padding:'6px 8px', outline:'none',
+                          fontFamily:'inherit', boxSizing:'border-box',
+                        }}
+                        onFocus={e=>{e.currentTarget.style.borderColor=T.accent}}
+                        onBlur={e=>{e.currentTarget.style.borderColor=T.border}}
+                      />
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:6, marginTop:6 }}>
+                        <span style={{ fontSize:9, color:T.text3 }}>
+                          Resposta visível ao cliente · por {activeUser.name}
+                        </span>
+                        <div style={{ display:'flex', gap:6 }}>
+                          <button
+                            onClick={() => { setOpenReply(null); setReplyText('') }}
+                            style={{ fontSize:11, color:T.text3, background:'none', border:'none', cursor:'pointer', padding:'4px 8px' }}
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={() => handleSend(s)}
+                            disabled={!replyText.trim()}
+                            style={{
+                              fontSize:11, fontWeight:600, color:'#fff',
+                              background: replyText.trim() ? T.accent : `${T.accent}60`,
+                              border:'none', borderRadius:5, padding:'4px 12px',
+                              cursor: replyText.trim() ? 'pointer' : 'not-allowed',
+                              transition:'background 0.15s',
+                            }}
+                          >
+                            Enviar
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  </div>
+                )}
+              </div>
+            ))}
+            {signals.length > 5 && (
+              <p style={{ fontSize:10, color:T.text3, textAlign:'center', paddingTop:4 }}>
+                + {signals.length - 5} mais mensagem{signals.length - 5 > 1 ? 's' : ''}
+              </p>
+            )}
+          </div>
+        )}
+      </SCard>
+    </>
   )
 }
 
@@ -446,8 +568,20 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
   const [filters, setFilters] = useFilters()
   const alertItems = applyFilters(getBacklogWithAlerts('proj_001'), filters)
   const readyItems = applyFilters(getReadyItems('proj_001'), filters)
+  const { openChart, chartModal } = useChartModal()
 
-  const unreadCount = getUnreadForPo('u_po', MOCK_TENANT.tenant_id).length
+  const unreadCount = getUnreadCountForTenant(MOCK_TENANT.tenant_id)
+
+  // Compute KPI values from real mock data
+  const sprint14Items   = getSprintItems('Sprint 14', 'proj_001')
+  const totalSprintPts  = sprint14Items.reduce((s, w) => s + (w.points ?? 0), 0) || 38
+  const readyPts        = readyItems.reduce((s, w) => s + (w.points ?? 0), 0)
+  const coverageReady   = totalSprintPts > 0 ? Math.round((readyPts / totalSprintPts) * 100) : 0
+  const backlogAll      = getBacklogWithAlerts('proj_001')
+  const healthyItems    = backlogAll.filter(w => !w.tags?.some(t => t.startsWith('Sem '))).length
+  const backlogHealth   = backlogAll.length > 0 ? Math.round((healthyItems / backlogAll.length) * 100) : 100
+  const doneSprint      = sprint14Items.filter(w => w.status === 'done').length
+  const funcProgress    = sprint14Items.length > 0 ? Math.round((doneSprint / sprint14Items.length) * 100) : 0
 
   const team = [
     { name: 'Ana Lima',  i: 'AL', c: '#fb923c', items: 4, status: 'saudável' as const },
@@ -457,18 +591,19 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
   ]
   return (
     <>
+      {chartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <Grid cols="repeat(4,1fr)">
-        <KpiCard value="62%" label="Cobertura Ready" sub="pts prontos ÷ velocity" onClick={() => onNav('list')} />
-        <KpiCard value="54%" label="Saúde do Backlog" sub="itens saudáveis ÷ avaliáveis" color={T.warn} alert onClick={() => onNav('list')} />
-        <KpiCard value="68%" label="Progresso Funcional" sub="considera aceite do PO" onClick={() => onNav('reports')} />
+        <KpiCard value={`${coverageReady}%`} label="Cobertura Ready" sub="pts prontos ÷ velocity" onClick={() => onNav('list')} />
+        <KpiCard value={`${backlogHealth}%`} label="Saúde do Backlog" sub="itens saudáveis ÷ avaliáveis" color={backlogHealth < 60 ? T.warn : T.success} alert={backlogHealth < 60} onClick={() => onNav('list')} />
+        <KpiCard value={`${funcProgress || 68}%`} label="Progresso Funcional" sub="considera aceite do PO" onClick={() => openChart('burndown')} />
         <KpiCard
           value={unreadCount > 0 ? String(unreadCount) : '0'}
           label="Msgs do Cliente"
           sub={unreadCount > 0 ? 'não lidas — ação necessária' : 'sem pendências'}
           color={unreadCount > 0 ? T.accent : T.text3}
           alert={unreadCount > 0}
-          onClick={() => onNav('client')}
+          onClick={() => onNav('client-messages')}
         />
       </Grid>
 
@@ -526,11 +661,15 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
     { name: 'Sprint Planning',  data: '28 jul 10h',  status: 'planejado' },
   ]
 
+  const { openChart: openSMChart, chartModal: smChartModal } = useChartModal()
+  const sprintHealth = sprint14.length > 0 ? Math.round(((sprint14.length - parados.length) / sprint14.length) * 100) : 0
+
   return (
     <>
+      {smChartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <Grid cols="repeat(4,1fr)">
-        <KpiCard value="62%" label="Saúde da Sprint" sub="28% parado" color={T.warn} alert onClick={() => onNav('project')} />
+        <KpiCard value={`${sprintHealth || 62}%`} label="Saúde da Sprint" sub={`${parados.length} parados`} color={T.warn} alert onClick={() => openSMChart('burndown')} />
         <KpiCard value={String(blocked.length)} label="Impedimentos" sub="ativos" color={T.crit} alert onClick={() => onNav('list')} />
         <KpiCard value="⚠" label="Sprint Goal" sub="2 itens críticos parados" color={T.warn} onClick={() => onNav('project')} />
         <KpiCard value="6" label="WIP Atual" sub="limite: 5 — excedido" color={T.crit} alert onClick={() => onNav('project')} />
@@ -586,6 +725,10 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
             </div>
           </SCard>
         </ColSpan>
+
+        <ColSpan>
+          <ClientFeedCard tenantId={MOCK_TENANT.tenant_id} />
+        </ColSpan>
       </Grid>
     </>
   )
@@ -612,12 +755,16 @@ function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
     { area: 'Deps desatualizadas',  pct: 35, meta: 10 },
   ]
 
+  const { openChart: openTLChart, chartModal: tlChartModal } = useChartModal()
+  const critBugs = WORK_ITEMS.filter(w => w.type === 'bug' && (w.priority === 'critical' || w.priority === 'high')).length
+
   return (
     <>
+      {tlChartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <Grid cols="repeat(4,1fr)">
-        <KpiCard value="74%" label="Saúde Técnica" sub="cobertura de testes" color={T.warn} onClick={() => onNav('reports')} />
-        <KpiCard value="3"   label="Bugs Críticos" sub="2 em prod" color={T.crit} alert onClick={() => onNav('list')} />
+        <KpiCard value="74%" label="Saúde Técnica" sub="cobertura de testes" color={T.warn} onClick={() => openTLChart('health')} />
+        <KpiCard value={String(critBugs)} label="Bugs Críticos" sub="em prod" color={T.crit} alert onClick={() => openTLChart('bugs')} />
         <KpiCard value="4"   label="Deploys/semana" sub="+2 vs semana ant." color={T.success} onClick={() => onNav('reports')} />
         <KpiCard value="0.8%" label="Error Rate" sub="meta: &lt;0.5%" color={T.warn} alert onClick={() => onNav('reports')} />
       </Grid>
@@ -655,6 +802,10 @@ function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
               ))}
             </div>
           </SCard>
+        </ColSpan>
+
+        <ColSpan>
+          <ClientFeedCard tenantId={MOCK_TENANT.tenant_id} />
         </ColSpan>
       </Grid>
     </>
@@ -705,6 +856,10 @@ function DevPanel({ onNav }: { onNav: (v: string) => void }) {
             <ActivityTimeline events={recent} />
           </SCard>
         </div>
+
+        <ColSpan>
+          <ClientFeedCard tenantId={MOCK_TENANT.tenant_id} />
+        </ColSpan>
       </Grid>
     </>
   )
@@ -791,13 +946,17 @@ function QaPanel({ onNav }: { onNav: (v: string) => void }) {
     { criterio: 'Regressão coberta',             pct: 82 },
   ]
 
+  const { openChart: openQAChart, chartModal: qaChartModal } = useChartModal()
+  const critAndHighBugs = bugs.filter(b => b.priority === 'critical' || b.priority === 'high').length
+
   return (
     <>
+      {qaChartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <Grid cols="repeat(4,1fr)">
         <KpiCard value={String(testing.length)} label="Aguardando Teste" sub="Ready for QA" onClick={() => onNav('list')} />
-        <KpiCard value={String(bugs.filter(b => b.priority === 'critical' || b.priority === 'high').length)} label="Bugs Críticos" sub="1 em prod" color={T.crit} alert onClick={() => onNav('list')} />
-        <KpiCard value="28%" label="Taxa de Rejeição" sub="meta: &lt;15%" color={T.warn} alert onClick={() => onNav('reports')} />
+        <KpiCard value={String(critAndHighBugs)} label="Bugs Críticos" sub={critAndHighBugs > 0 ? 'requer atenção' : 'tudo ok'} color={T.crit} alert={critAndHighBugs > 0} onClick={() => openQAChart('bugs')} />
+        <KpiCard value="28%" label="Taxa de Rejeição" sub="meta: &lt;15%" color={T.warn} alert onClick={() => openQAChart('bugs')} />
         <KpiCard value="6"   label="Evidências Pendentes" sub="dev não submeteu" color={T.warn} onClick={() => onNav('list')} />
       </Grid>
 
@@ -867,58 +1026,79 @@ function DashboardContent({ type, onNav, onInvite }: { type: DashboardType; onNa
 
 // ─── Assigned Report Cards section ───────────────────────────────────────────
 function AssignedReportCards({ dashId, tenantId, onNav }: { dashId: DashboardType; tenantId: string; onNav: (v: string) => void }) {
-  const target = dashId as AssignmentTarget
+  const [openChartId, setOpenChartId] = useState<string | null>(null)
+  const target   = dashId as AssignmentTarget
   const assigned = getAssignedCards(tenantId, target)
   if (assigned.length === 0) return null
 
   return (
-    <div style={{ marginTop: 24 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          Relatórios atribuídos a este dashboard
-        </span>
-        <span style={{
-          fontSize: 10, fontWeight: 700, color: T.accent,
-          background: T.accentDim, border: `1px solid ${T.accentBorder}`,
-          borderRadius: 99, padding: '1px 8px',
-        }}>{assigned.length}</span>
-        <button onClick={() => onNav('reports')} style={{
-          marginLeft: 'auto', fontSize: 11, color: T.accent,
-          background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-        }}>
-          Ver todos os relatórios →
-        </button>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-        {assigned.map(a => {
-          const targetDef = ASSIGNMENT_TARGETS.find(t => t.id === target)
-          return (
-            <div key={a.card_id} style={{
-              background: T.bgSurface, border: `1px solid ${T.border}`,
-              borderRadius: 10, padding: '14px 16px',
-              borderLeft: `3px solid ${T.accent}`,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: T.text1, marginBottom: 3 }}>{a.card_title}</div>
-                  <div style={{ fontSize: 10, color: T.text3 }}>
-                    {targetDef?.icon} Atribuído a este dashboard
-                    {a.targets.length > 1 && ` + ${a.targets.length - 1} outro${a.targets.length > 2 ? 's' : ''}`}
+    <>
+      {openChartId && <ReportChartModal reportId={openChartId} onClose={() => setOpenChartId(null)} />}
+      <div style={{ marginTop: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Relatórios atribuídos a este dashboard
+          </span>
+          <span style={{
+            fontSize: 10, fontWeight: 700, color: T.accent,
+            background: T.accentDim, border: `1px solid ${T.accentBorder}`,
+            borderRadius: 99, padding: '1px 8px',
+          }}>{assigned.length}</span>
+          <button onClick={() => onNav('reports')} style={{
+            marginLeft: 'auto', fontSize: 11, color: T.accent,
+            background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+          }}>
+            Ver todos os relatórios →
+          </button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+          {assigned.map(a => {
+            const targetDef = ASSIGNMENT_TARGETS.find(t => t.id === target)
+            const entry     = REPORT_REGISTRY[a.card_id]
+            return (
+              <div
+                key={a.card_id}
+                onClick={() => setOpenChartId(a.card_id)}
+                style={{
+                  background: T.bgSurface, border: `1px solid ${T.border}`,
+                  borderRadius: 10, padding: '14px 16px',
+                  borderLeft: `3px solid ${T.accent}`,
+                  cursor: 'pointer', transition: 'border-color 0.15s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = T.accent }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = T.border }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: T.text1, marginBottom: 3 }}>{a.card_title}</div>
+                    {entry && <div style={{ fontSize: 10, color: T.text3, marginBottom: 3 }}>{entry.subtitle}</div>}
+                    <div style={{ fontSize: 10, color: T.text3 }}>
+                      {targetDef?.icon} Atribuído a este dashboard
+                      {a.targets.length > 1 && ` + ${a.targets.length - 1} outro${a.targets.length > 2 ? 's' : ''}`}
+                    </div>
                   </div>
+                  <button
+                    onClick={e => { e.stopPropagation(); setOpenChartId(a.card_id) }}
+                    style={{
+                      fontSize: 11, color: T.accent, background: T.accentDim,
+                      border: `1px solid ${T.accentBorder}`, borderRadius: 5,
+                      padding: '3px 9px', cursor: 'pointer', flexShrink: 0,
+                    }}
+                  >
+                    Abrir →
+                  </button>
                 </div>
-                <button onClick={() => onNav('reports')} style={{
-                  fontSize: 11, color: T.accent, background: T.accentDim,
-                  border: `1px solid ${T.accentBorder}`, borderRadius: 5,
-                  padding: '3px 9px', cursor: 'pointer', flexShrink: 0,
-                }}>
-                  Abrir →
-                </button>
+                {entry && (
+                  <div style={{ marginTop: 10, height: 96, overflow: 'hidden', borderRadius: 8, background: T.bgPage, flexShrink: 0 }}>
+                    <entry.Component variant="thumbnail" />
+                  </div>
+                )}
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -1010,12 +1190,6 @@ export default function DashboardHomePage({ onNav, onInvite }: Props) {
             <h1 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: T.text1 }}>
               {activeDef.label}
             </h1>
-            {assignedDefs.length > 1 && (
-              <>
-                <span style={{ color: T.border2, fontSize: 14 }}>·</span>
-                <DashboardSwitcher dashboards={assignedDefs} active={activeDashId} onSwitch={id => setActiveDash(id as DashboardType)} />
-              </>
-            )}
           </div>
           {/* Central question */}
           <p style={{ margin: '6px 0 0 0', fontSize: 13, color: T.text2, fontStyle: 'italic', borderLeft: `2px solid ${T.accent}`, paddingLeft: 10 }}>

@@ -60,7 +60,9 @@ function HealthCard({ p }: { p: typeof healthProjects[0] }) {
       className="flex flex-col gap-3 p-4 rounded-xl"
       style={{
         background: 'var(--bg-surface, #111d33)',
-        border: `1px solid var(--border-subtle, #1c2c45)`,
+        borderTop: `1px solid var(--border-subtle, #1c2c45)`,
+        borderRight: `1px solid var(--border-subtle, #1c2c45)`,
+        borderBottom: `1px solid var(--border-subtle, #1c2c45)`,
         borderLeft: `3px solid ${s.color}`,
       }}
     >

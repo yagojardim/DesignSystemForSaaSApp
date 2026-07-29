@@ -56,6 +56,7 @@ export interface MockUser {
   modules_enabled: string[]
   permissions: string[]
   assigned_dashboards: UserDashboard[]
+  password_must_change?: boolean
 }
 
 // ─── Catalog of all 10 dashboards ────────────────────────────────────────────

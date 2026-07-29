@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { T } from '../components/ds/tokens'
+import { getClientAccessByEmail } from '../data/clientAccess'
+import { MOCK_TENANT } from '../data/session'
 
 interface Props {
-  onSuccess: (permission: 'viewer' | 'admin') => void
+  onSuccess: (permission: 'viewer' | 'admin', mustChangePassword: boolean) => void
   onBack?: () => void
 }
 
@@ -34,6 +36,12 @@ export default function ClientLoginPage({ onSuccess }: Props) {
   const isLoading = loginState === 'loading'
   const isSuccess = loginState === 'success-viewer' || loginState === 'success-admin'
   const isAdmin = loginState === 'success-admin'
+
+  function handleEnterPortal() {
+    const record = getClientAccessByEmail(MOCK_TENANT.tenant_id, email)
+    const mustChange = record?.password_must_change ?? false
+    onSuccess(isAdmin ? 'admin' : 'viewer', mustChange)
+  }
 
   const inputBase: React.CSSProperties = {
     width: '100%', background: T.bgSurface2, border: `1px solid ${T.border}`, borderRadius: 8,
@@ -193,7 +201,7 @@ export default function ClientLoginPage({ onSuccess }: Props) {
             </div>
 
             <button
-              onClick={() => onSuccess(isAdmin ? 'admin' : 'viewer')}
+              onClick={handleEnterPortal}
               style={{
                 width: '100%', background: PA, border: 'none', color: '#fff',
                 height: 44, borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer',

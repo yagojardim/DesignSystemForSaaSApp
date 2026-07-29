@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { T } from '../components/ds/tokens'
+import { generateTempPassword } from '../data/security'
+import { createClientAccess } from '../data/clientAccess'
+import { MOCK_TENANT } from '../data/session'
 
 interface Props {
-  onGoToPortal: () => void
-  onBack?: () => void
+  onBack: () => void
 }
 
 const PROJECTS = [
@@ -12,23 +14,25 @@ const PROJECTS = [
   { id: 'ep03', name: 'Pesquisa & Conteúdo', code: 'EP-03', quarter: 'Q3 2025', status: 'Planejado', issues: 4, color: '#a78bfa' },
 ]
 
-function generateHash() {
-  return Math.random().toString(36).slice(2, 10)
-}
-
-export default function ClientAccessPage({ onGoToPortal }: Props) {
+export default function ClientAccessPage({ onBack }: Props) {
   const [step, setStep] = useState(1)
   const [clientName, setClientName] = useState('')
   const [clientEmail, setClientEmail] = useState('')
   const [selectedProjects, setSelectedProjects] = useState<string[]>([])
   const [permission, setPermission] = useState<'viewer' | 'admin'>('viewer')
+  const [clientCanApprove, setClientCanApprove] = useState(false)
+  const [clientCanPreview, setClientCanPreview] = useState(false)
   const [done, setDone] = useState(false)
   const [generatedUrl, setGeneratedUrl] = useState('')
+  const [generatedPwd, setGeneratedPwd] = useState('')
   const [copied, setCopied] = useState(false)
+  const [pwdCopied, setPwdCopied] = useState(false)
 
   useEffect(() => {
     if (done) {
-      setGeneratedUrl(`https://portal.altech.io/client/${generateHash()}`)
+      const hash = Math.random().toString(36).slice(2, 10)
+      setGeneratedUrl(`https://portal.altech.io/client/${hash}`)
+      setGeneratedPwd(generateTempPassword())
     }
   }, [done])
 
@@ -39,6 +43,14 @@ export default function ClientAccessPage({ onGoToPortal }: Props) {
   }
 
   function handleSubmit() {
+    createClientAccess({
+      tenant_id:          MOCK_TENANT.tenant_id,
+      client_name:        clientName.trim(),
+      client_email:       clientEmail.trim(),
+      permission,
+      client_can_approve: clientCanApprove,
+      client_can_preview: clientCanPreview,
+    })
     setDone(true)
   }
 
@@ -48,15 +60,25 @@ export default function ClientAccessPage({ onGoToPortal }: Props) {
     setClientEmail('')
     setSelectedProjects([])
     setPermission('viewer')
+    setClientCanApprove(false)
+    setClientCanPreview(false)
     setDone(false)
     setGeneratedUrl('')
+    setGeneratedPwd('')
     setCopied(false)
+    setPwdCopied(false)
   }
 
   function copyUrl() {
     navigator.clipboard.writeText(generatedUrl).catch(() => {})
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  function copyPwd() {
+    navigator.clipboard.writeText(generatedPwd).catch(() => {})
+    setPwdCopied(true)
+    setTimeout(() => setPwdCopied(false), 2000)
   }
 
   const selectedProjectObjs = PROJECTS.filter(p => selectedProjects.includes(p.id))
@@ -132,7 +154,7 @@ export default function ClientAccessPage({ onGoToPortal }: Props) {
             </div>
 
             {/* URL section */}
-            <div style={{ background: T.bgSurface2, borderLeft: `4px solid ${T.accent}`, borderRadius: 10, padding: 20, marginBottom: 20, textAlign: 'left' }}>
+            <div style={{ background: T.bgSurface2, borderLeft: `4px solid ${T.accent}`, borderRadius: 10, padding: 20, marginBottom: 16, textAlign: 'left' }}>
               <div style={{ fontSize: 11, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>URL do portal do cliente</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <span style={{ fontFamily: 'monospace', fontSize: 13, color: T.accent, userSelect: 'all', flex: 1, wordBreak: 'break-all' }}>
@@ -149,6 +171,39 @@ export default function ClientAccessPage({ onGoToPortal }: Props) {
               </div>
             </div>
 
+            {/* Password section — shown once */}
+            {generatedPwd && (
+              <div style={{
+                background: T.bgSurface2,
+                borderTop:    `1px solid ${T.border}`,
+                borderRight:  `1px solid ${T.border}`,
+                borderBottom: `1px solid ${T.border}`,
+                borderLeft:   `4px solid ${T.accent}`,
+                borderRadius: 10, padding: 20, marginBottom: 16, textAlign: 'left',
+              }}>
+                <div style={{ fontSize: 11, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+                  Senha temporária — exibida uma única vez
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ fontFamily: 'monospace', fontSize: 18, color: T.accent, letterSpacing: '0.12em', userSelect: 'all', flex: 1 }}>
+                    {generatedPwd}
+                  </span>
+                  <button onClick={copyPwd} style={{
+                    background: pwdCopied ? T.successDim : T.accentDim,
+                    border: `1px solid ${pwdCopied ? T.success : T.accentBorder}`,
+                    color: pwdCopied ? T.success : T.accent,
+                    borderRadius: 6, padding: '6px 14px', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                  }}>
+                    {pwdCopied ? '✓ Copiado!' : '📋 Copiar senha'}
+                  </button>
+                </div>
+                <div style={{ fontSize: 11, color: T.warn, marginTop: 12, lineHeight: 1.5 }}>
+                  ⚠ Copie agora. O cliente deverá alterar no primeiro acesso. Após sair desta tela, a senha não será reexibida.
+                  <span style={{ color: T.text3, display: 'block', marginTop: 4 }}>Inspection Mode — senha demonstrativa, sem hash real.</span>
+                </div>
+              </div>
+            )}
+
             {/* Notice box */}
             <div style={{ background: T.warnDim, border: `1px solid ${T.warn}`, borderRadius: 10, padding: 16, marginBottom: 28, textAlign: 'left', fontSize: 13, color: T.text2, lineHeight: 1.6 }}>
               📨 <strong style={{ color: T.warn }}>Credenciais enviadas automaticamente:</strong> login e senha temporária foram enviados para <strong style={{ color: T.text1 }}>{clientEmail}</strong>. O cliente deve alterar a senha no primeiro acesso. O e-mail é enviado pelo sistema do tenant Altech Agency.
@@ -161,11 +216,11 @@ export default function ClientAccessPage({ onGoToPortal }: Props) {
               }}>
                 Criar outro acesso
               </button>
-              <button onClick={onGoToPortal} style={{
+              <button onClick={onBack} style={{
                 background: T.accent, border: 'none', color: '#fff',
                 borderRadius: 8, padding: '10px 20px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
               }}>
-                Ir ao portal do cliente
+                Concluído
               </button>
             </div>
           </div>
@@ -320,7 +375,9 @@ export default function ClientAccessPage({ onGoToPortal }: Props) {
                       style={{
                         display: 'flex', alignItems: 'flex-start', gap: 14, padding: '18px 20px',
                         background: selected ? T.accentDim : T.bgSurface2,
-                        border: `1px solid ${selected ? T.accentBorder : T.border}`,
+                        borderTop: `1px solid ${selected ? T.accentBorder : T.border}`,
+                        borderRight: `1px solid ${selected ? T.accentBorder : T.border}`,
+                        borderBottom: `1px solid ${selected ? T.accentBorder : T.border}`,
                         borderLeft: `4px solid ${selected ? T.accent : T.text3}`,
                         borderRadius: 10, cursor: 'pointer',
                       }}>
@@ -333,7 +390,7 @@ export default function ClientAccessPage({ onGoToPortal }: Props) {
                   )
                 })}
               </div>
-              <div style={{ marginBottom: 28 }}>
+              <div style={{ marginBottom: 16 }}>
                 <span style={{ fontSize: 13, color: T.text3, marginRight: 8 }}>Papel atribuído:</span>
                 <span style={{
                   background: permission === 'admin' ? T.accentDim : T.bgSurface2,
@@ -344,6 +401,87 @@ export default function ClientAccessPage({ onGoToPortal }: Props) {
                   {permissionLabel}
                 </span>
               </div>
+
+              {/* ── Capacidades granulares do portal ── */}
+              <div style={{
+                background: T.bgSurface2, border: `1px solid ${T.border}`,
+                borderRadius: 12, padding: '20px 20px 16px', marginBottom: 28,
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.text2, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16 }}>
+                  Capacidades no portal do cliente
+                </div>
+
+                {/* Toggle: Aprovar */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: T.text1, marginBottom: 2 }}>Permitir aprovar entregas</div>
+                    <div style={{ fontSize: 11, color: T.text3, lineHeight: 1.5 }}>
+                      O cliente poderá registrar aprovação nos itens "Aguardando sua validação". Recomendado apenas para times experientes.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setClientCanApprove(v => !v)}
+                    style={{
+                      width: 44, height: 24, borderRadius: 12, border: 'none',
+                      background: clientCanApprove ? T.success : T.border2,
+                      cursor: 'pointer', position: 'relative', flexShrink: 0,
+                      transition: 'background 0.2s',
+                    }}
+                    aria-label="Alternar permissão de aprovação"
+                  >
+                    <span style={{
+                      position: 'absolute', top: 3, left: clientCanApprove ? 23 : 3,
+                      width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                      transition: 'left 0.2s', display: 'block',
+                    }} />
+                  </button>
+                </div>
+
+                {/* Toggle: Preview */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: T.text1, marginBottom: 2 }}>Permitir ver preview</div>
+                    <div style={{ fontSize: 11, color: T.text3, lineHeight: 1.5 }}>
+                      O cliente poderá visualizar pré-visualizações das entregas antes da validação final.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setClientCanPreview(v => !v)}
+                    style={{
+                      width: 44, height: 24, borderRadius: 12, border: 'none',
+                      background: clientCanPreview ? T.success : T.border2,
+                      cursor: 'pointer', position: 'relative', flexShrink: 0,
+                      transition: 'background 0.2s',
+                    }}
+                    aria-label="Alternar permissão de preview"
+                  >
+                    <span style={{
+                      position: 'absolute', top: 3, left: clientCanPreview ? 23 : 3,
+                      width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                      transition: 'left 0.2s', display: 'block',
+                    }} />
+                  </button>
+                </div>
+
+                {/* Native capability: Comment */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10, paddingTop: 12,
+                  borderTop: `1px solid ${T.border}`,
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ color: T.success, flexShrink: 0 }}>
+                    <path d="M2 3.5h10M2 6.5h7M2 9.5h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                  </svg>
+                  <div>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: T.success }}>Comentar: sempre habilitado</span>
+                    <span style={{ fontSize: 11, color: T.text3, marginLeft: 8 }}>
+                      Capacidade nativa — o cliente pode comentar em qualquer entrega. Não é possível desabilitar.
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               <div style={{ display: 'flex', gap: 12 }}>
                 <button onClick={() => setStep(2)} style={{ background: 'transparent', border: `1px solid ${T.border2}`, color: T.text2, borderRadius: 8, padding: '10px 20px', fontSize: 14, cursor: 'pointer' }}>
                   ← Voltar

@@ -7,7 +7,7 @@ export type View =
   | 'projects-list' | 'gantt' | 'calendar'
   | 'list' | 'timeline' | 'epics' | 'releases' | 'filters' | 'navigator'
   | 'reports' | 'automations' | 'config' | 'team' | 'my-tasks'
-  | 'login' | 'role-dashboard' | 'client-access' | 'client-login'
+  | 'login' | 'role-dashboard' | 'client-access' | 'client-login' | 'client-messages'
 
 interface ShellProps {
   children:     ReactNode
@@ -20,7 +20,7 @@ const VALID_VIEWS: View[] = [
   'home','dashboard','project','issue','client','task-drawer','projects-list','gantt','calendar',
   'list','timeline','epics','releases','filters','navigator',
   'reports','automations','config','team','my-tasks',
-  'login','role-dashboard','client-access','client-login',
+  'login','role-dashboard','client-access','client-login','client-messages',
 ]
 
 export function Shell({ children, currentView, onViewChange, onCreateIssue }: ShellProps) {

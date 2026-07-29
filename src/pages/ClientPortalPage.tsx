@@ -1,8 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   addClientSignal, getSignalsForItem, markReadByPo,
+  getClientUnreadReplies, markReplyReadByClient, markAllClientRepliesRead,
+  type ClientSignal,
 } from '../data/clientSignals'
+import { getClientPermissions, getClientAccess, updateClientPassword } from '../data/clientAccess'
 import { MOCK_TENANT } from '../data/session'
+
+// Inspection Mode: the portal client is always "João Silva" (mock)
+const CLIENT_AUTHOR = 'João Silva'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -619,6 +625,8 @@ function ValidationCard({ onComment }: { onComment: (msg: string) => void }) {
   const [approved, setApproved] = useState<Set<string>>(new Set())
   const [refresh, setRefresh] = useState(0)
 
+  const perms = getClientPermissions(MOCK_TENANT.tenant_id, CLIENT_AUTHOR)
+
   function handleSent(_msg: string) {
     setRefresh(r => r + 1)
     onComment(`Comentário enviado — a equipe responsável será notificada.`)
@@ -654,38 +662,48 @@ function ValidationCard({ onComment }: { onComment: (msg: string) => void }) {
                 </div>
               </div>
               {!done ? (
-                <div className="flex items-center gap-2">
-                  <button
-                    className="h-7 px-3 rounded-lg text-xs font-medium transition-all"
-                    style={{ background: C.surface, border: `1px solid ${C.border2}`, color: C.txt2 }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.accent }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.border2 }}
-                  >
-                    Ver preview
-                  </button>
-                  <button
-                    onClick={() => {
-                      setApproved(prev => new Set([...prev, v.id]))
-                      addClientSignal({
-                        type: 'approval', item_id: v.id, item_title: v.title,
-                        project: v.project, tenant_id: MOCK_TENANT.tenant_id,
-                        responsible_po: 'u_po', author: 'João Silva',
-                        author_initials: 'JS', created_at: new Date().toISOString(),
-                        read_by_po: false,
-                      })
-                      onComment(`✓ Aprovação registrada: "${v.title}"`)
-                    }}
-                    className="h-7 px-3 rounded-lg text-xs font-semibold transition-all"
-                    style={{ background: C.success, color: '#fff' }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85' }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1' }}
-                  >
-                    Aprovar
-                  </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {perms.client_can_preview && (
+                    <button
+                      className="h-7 px-3 rounded-lg text-xs font-medium transition-all"
+                      style={{ background: C.surface, border: `1px solid ${C.border2}`, color: C.txt2 }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.accent }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.border2 }}
+                    >
+                      Ver preview
+                    </button>
+                  )}
+                  {perms.client_can_approve && (
+                    <button
+                      onClick={() => {
+                        setApproved(prev => new Set([...prev, v.id]))
+                        addClientSignal({
+                          type: 'approval', item_id: v.id, item_title: v.title,
+                          project: v.project, tenant_id: MOCK_TENANT.tenant_id,
+                          responsible_po: 'u_po', author: 'João Silva',
+                          author_initials: 'JS', created_at: new Date().toISOString(),
+                          read_by_po: false,
+                        })
+                        onComment(`✓ Aprovação registrada: "${v.title}"`)
+                      }}
+                      className="h-7 px-3 rounded-lg text-xs font-semibold transition-all"
+                      style={{ background: C.success, color: '#fff' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85' }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1' }}
+                    >
+                      Aprovar
+                    </button>
+                  )}
+                  {/* Comment is always available — native capability */}
                   <ClientCommentInput
                     itemId={v.id} itemTitle={v.title} project={v.project}
                     onSent={handleSent}
                   />
+                  {!perms.client_can_approve && !perms.client_can_preview && (
+                    <span className="text-[10px]" style={{ color: C.txt3 }}>
+                      Aguardando avaliação da equipe
+                    </span>
+                  )}
                 </div>
               ) : (
                 <p className="text-[10px] font-semibold" style={{ color: C.success }}>✓ Aprovado por você</p>
@@ -798,6 +816,347 @@ function EmptyState() {
   )
 }
 
+// ─── CLIENT NOTIFICATION BELL ────────────────────────────────────────────────
+function ClientNotifBell({
+  tick, onRead,
+}: {
+  tick: number; onRead: (msg: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [localTick, setLocalTick] = useState(0)
+  const ref = useRef<HTMLDivElement>(null)
+
+  void tick
+  void localTick
+
+  useEffect(() => {
+    function close(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [])
+
+  const unread = getClientUnreadReplies(MOCK_TENANT.tenant_id, CLIENT_AUTHOR)
+
+  function handleClick(sig: ClientSignal) {
+    markReplyReadByClient(sig.id)
+    setLocalTick(t => t + 1)
+    setOpen(false)
+    onRead(`${sig.po_reply_by ?? 'Equipe Altech'} respondeu: "${(sig.po_reply ?? '').slice(0, 80)}${(sig.po_reply ?? '').length > 80 ? '…' : ''}"`)
+  }
+
+  function handleMarkAll() {
+    markAllClientRepliesRead(MOCK_TENANT.tenant_id, CLIENT_AUTHOR)
+    setLocalTick(t => t + 1)
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="relative w-9 h-9 rounded-xl flex items-center justify-center transition-all"
+        style={{
+          background: open ? `${C.accent}18` : C.surface2,
+          border: `1px solid ${open ? C.accent + '60' : C.border}`,
+          color: C.txt2,
+        }}
+        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.accent + '60'; (e.currentTarget as HTMLButtonElement).style.color = C.accent }}
+        onMouseLeave={e => { if (!open) { (e.currentTarget as HTMLButtonElement).style.borderColor = C.border; (e.currentTarget as HTMLButtonElement).style.color = C.txt2 } }}
+        aria-label="Notificações"
+      >
+        {/* Bell icon */}
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M8 2a5 5 0 00-5 5v2.5L2 11h12l-1-1.5V7a5 5 0 00-5-5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+          <path d="M6.5 12.5a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+        {/* Badge */}
+        {unread.length > 0 && (
+          <span
+            className="absolute -top-1 -right-1 min-w-[17px] h-[17px] rounded-full flex items-center justify-center text-[9px] font-bold"
+            style={{ background: C.crit, color: '#fff', padding: '0 3px' }}
+          >
+            {unread.length}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div
+          className="absolute top-full right-0 mt-2 z-50 fade-rise"
+          style={{
+            background: C.surface,
+            border: `1px solid ${C.border}`,
+            borderRadius: 12,
+            boxShadow: '0 24px 64px rgba(0,0,0,0.56)',
+            width: 360,
+          }}
+        >
+          {/* Header */}
+          <div
+            className="flex items-center justify-between px-4 py-3"
+            style={{ borderBottom: `1px solid ${C.border}` }}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold" style={{ color: C.txt }}>Notificações</span>
+              {unread.length > 0 && (
+                <span
+                  className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                  style={{ background: C.crit, color: '#fff' }}
+                >
+                  {unread.length} nova{unread.length > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+            {unread.length > 0 && (
+              <button
+                onClick={handleMarkAll}
+                className="text-[10px] transition-colors"
+                style={{ color: C.txt3, background: 'none', border: 'none', cursor: 'pointer' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = C.accent }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = C.txt3 }}
+              >
+                Marcar todas como lidas
+              </button>
+            )}
+          </div>
+
+          {/* List */}
+          <div className="max-h-80 overflow-y-auto py-1">
+            {unread.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-3 px-4 py-8">
+                <div
+                  className="w-10 h-10 rounded-full flex items-center justify-center"
+                  style={{ background: C.surface2 }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ color: C.txt3 }}>
+                    <path d="M9 3a6 6 0 00-6 6v2.5L2 13h14l-1-1.5V9a6 6 0 00-6-6z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+                    <path d="M7.5 14.5a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                  </svg>
+                </div>
+                <p className="text-xs text-center" style={{ color: C.txt3 }}>Nenhuma notificação não lida</p>
+              </div>
+            ) : (
+              unread.map(sig => (
+                <button
+                  key={sig.id}
+                  onClick={() => handleClick(sig)}
+                  className="w-full flex items-start gap-3 px-4 py-3 text-left transition-all"
+                  style={{ background: 'transparent' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${C.accent}08` }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                >
+                  {/* Avatar */}
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5"
+                    style={{ background: C.success, color: '#fff' }}
+                  >
+                    EA
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-semibold mb-0.5" style={{ color: C.txt }}>
+                      {sig.po_reply_by ?? 'Equipe Altech'} respondeu seu comentário
+                    </p>
+                    <p className="text-[10px] leading-snug mb-1 line-clamp-2" style={{ color: C.txt2 }}>
+                      "{sig.po_reply}"
+                    </p>
+                    <p className="text-[9px]" style={{ color: C.txt3 }}>
+                      {sig.item_title} · {sig.project}
+                    </p>
+                  </div>
+                  <span className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5" style={{ background: C.accent }} />
+                </button>
+              ))
+            )}
+          </div>
+
+          {/* Footer note */}
+          <div
+            className="px-4 py-2.5 text-[9px] text-center"
+            style={{ borderTop: `1px solid ${C.border}`, color: C.txt3 }}
+          >
+            Notificações deste tenant · {MOCK_TENANT.tenant_id.replace('ten_', '')}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── FIRST-ACCESS CHANGE PASSWORD MODAL ──────────────────────────────────────
+function validateNewPassword(pwd: string): string[] {
+  const errors: string[] = []
+  if (pwd.length < 8 || pwd.length > 16)  errors.push('Entre 8 e 16 caracteres')
+  if (!/[a-zA-Z]/.test(pwd))              errors.push('Pelo menos uma letra')
+  if (!/\d/.test(pwd))                    errors.push('Pelo menos um número')
+  if (!/[@#$%!^&*_\-+=]/.test(pwd))       errors.push('Pelo menos um caractere especial (@#$%!^&*_-+=)')
+  return errors
+}
+
+function ChangePasswordModal({ onSaved }: { onSaved: () => void }) {
+  const [pwd1, setPwd1]       = useState('')
+  const [pwd2, setPwd2]       = useState('')
+  const [show1, setShow1]     = useState(false)
+  const [show2, setShow2]     = useState(false)
+  const [touched, setTouched] = useState(false)
+  const [saving, setSaving]   = useState(false)
+
+  const errors1  = validateNewPassword(pwd1)
+  const mismatch = pwd1 !== pwd2 && pwd2.length > 0
+  const valid    = errors1.length === 0 && pwd1 === pwd2 && pwd2.length > 0
+
+  function handleSave() {
+    if (!valid) return
+    setSaving(true)
+    const rec = getClientAccess(MOCK_TENANT.tenant_id, CLIENT_AUTHOR)
+    if (rec) updateClientPassword(rec.id, pwd1)
+    setTimeout(() => {
+      setSaving(false)
+      onSaved()
+    }, 600)
+  }
+
+  const fieldBase: React.CSSProperties = {
+    width: '100%', background: C.bg, border: `1px solid ${C.border2}`,
+    borderRadius: 8, padding: '10px 40px 10px 12px', color: C.txt, fontSize: 13,
+    outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center"
+      style={{ background: 'rgba(8,10,14,0.85)', backdropFilter: 'blur(6px)' }}
+    >
+      <div
+        className="w-full max-w-md fade-rise"
+        style={{
+          background: C.surface,
+          border: `1px solid ${C.border}`,
+          borderTop: `3px solid ${C.accent}`,
+          borderRadius: 16,
+          boxShadow: '0 32px 80px rgba(0,0,0,0.7)',
+          padding: 36,
+        }}
+      >
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-5">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: `${C.accent}18`, border: `1px solid ${C.accent}30` }}
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ color: C.accent }}>
+              <rect x="3" y="8" width="12" height="8" rx="2" stroke="currentColor" strokeWidth="1.3" />
+              <path d="M6 8V6a3 3 0 016 0v2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              <circle cx="9" cy="12.5" r="1" fill="currentColor" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-base font-bold" style={{ color: C.txt }}>Primeiro acesso</p>
+            <p className="text-xs mt-0.5" style={{ color: C.txt3 }}>Por segurança, defina uma nova senha antes de continuar.</p>
+          </div>
+        </div>
+
+        {/* Field 1 */}
+        <div className="mb-4">
+          <label className="block text-xs font-medium mb-1.5" style={{ color: C.txt2 }}>Nova senha</label>
+          <div style={{ position: 'relative' }}>
+            <input
+              type={show1 ? 'text' : 'password'}
+              value={pwd1}
+              onChange={e => { setPwd1(e.target.value); setTouched(true) }}
+              placeholder="••••••••"
+              autoFocus
+              style={{
+                ...fieldBase,
+                borderColor: touched && errors1.length > 0 ? C.crit + '80' : C.border2,
+              }}
+              onFocus={e => (e.target.style.borderColor = C.accent + '80')}
+              onBlur={e => (e.target.style.borderColor = touched && errors1.length > 0 ? C.crit + '80' : C.border2)}
+            />
+            <button
+              type="button"
+              onClick={() => setShow1(v => !v)}
+              style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: C.txt3, fontSize: 14, padding: 4 }}
+            >
+              {show1 ? '🙈' : '👁'}
+            </button>
+          </div>
+          {/* Inline requirements */}
+          {touched && (
+            <div className="mt-2 space-y-1">
+              {[
+                { label: 'Entre 8 e 16 caracteres', ok: pwd1.length >= 8 && pwd1.length <= 16 },
+                { label: 'Pelo menos uma letra',    ok: /[a-zA-Z]/.test(pwd1) },
+                { label: 'Pelo menos um número',    ok: /\d/.test(pwd1) },
+                { label: 'Caractere especial (@#$%!^&*_-+=)', ok: /[@#$%!^&*_\-+=]/.test(pwd1) },
+              ].map(req => (
+                <div key={req.label} className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold flex-shrink-0" style={{ color: req.ok ? C.success : C.crit }}>
+                    {req.ok ? '✓' : '✗'}
+                  </span>
+                  <span className="text-[10px]" style={{ color: req.ok ? C.success : C.txt3 }}>{req.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Field 2 */}
+        <div className="mb-6">
+          <label className="block text-xs font-medium mb-1.5" style={{ color: C.txt2 }}>Repetir nova senha</label>
+          <div style={{ position: 'relative' }}>
+            <input
+              type={show2 ? 'text' : 'password'}
+              value={pwd2}
+              onChange={e => setPwd2(e.target.value)}
+              placeholder="••••••••"
+              style={{
+                ...fieldBase,
+                borderColor: mismatch ? C.crit + '80' : C.border2,
+              }}
+              onFocus={e => (e.target.style.borderColor = C.accent + '80')}
+              onBlur={e => (e.target.style.borderColor = mismatch ? C.crit + '80' : C.border2)}
+            />
+            <button
+              type="button"
+              onClick={() => setShow2(v => !v)}
+              style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: C.txt3, fontSize: 14, padding: 4 }}
+            >
+              {show2 ? '🙈' : '👁'}
+            </button>
+          </div>
+          {mismatch && (
+            <p className="text-[10px] mt-1.5" style={{ color: C.crit }}>✗ As senhas não coincidem</p>
+          )}
+          {valid && (
+            <p className="text-[10px] mt-1.5" style={{ color: C.success }}>✓ Senhas coincidem</p>
+          )}
+        </div>
+
+        {/* Save button */}
+        <button
+          onClick={handleSave}
+          disabled={!valid || saving}
+          className="w-full h-11 rounded-xl text-sm font-semibold transition-all"
+          style={{
+            background: valid && !saving ? C.accent : C.border2,
+            color: valid && !saving ? '#fff' : C.txt3,
+            border: 'none', cursor: valid && !saving ? 'pointer' : 'not-allowed',
+            opacity: saving ? 0.7 : 1,
+          }}
+        >
+          {saving ? 'Salvando…' : 'Salvar nova senha'}
+        </button>
+
+        {/* Inspection Mode notice */}
+        <p className="text-[9px] text-center mt-4" style={{ color: C.txt3 }}>
+          Inspection Mode — senha demonstrativa, sem hash real. Não utilize senhas reais.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 // ─── PROJECT SELECTOR ────────────────────────────────────────────────────────
 function ProjectSelector({ selected, onToggle }: { selected: Set<string>; onToggle: (id: string) => void }) {
   const [open, setOpen] = useState(false)
@@ -876,9 +1235,10 @@ function ProjectSelector({ selected, onToggle }: { selected: Set<string>; onTogg
 
 // ─── PORTAL HEADER ────────────────────────────────────────────────────────────
 function PortalHeader({
-  selected, onToggle,
+  selected, onToggle, notifTick, onNotifRead,
 }: {
   selected: Set<string>; onToggle: (id: string) => void
+  notifTick: number; onNotifRead: (msg: string) => void
 }) {
   return (
     <header
@@ -904,8 +1264,10 @@ function PortalHeader({
         <ProjectSelector selected={selected} onToggle={onToggle} />
       </div>
 
-      {/* Right: date */}
-      <div className="flex items-center gap-4 flex-shrink-0">
+      {/* Right: notification bell + date */}
+      <div className="flex items-center gap-3 flex-shrink-0">
+        <ClientNotifBell tick={notifTick} onRead={onNotifRead} />
+
         <div className="text-right">
           <p className="text-xs font-medium" style={{ color: C.txt }}>25 jul 2025</p>
           <p className="text-[10px]" style={{ color: C.txt3 }}>Atualizado agora</p>
@@ -916,9 +1278,23 @@ function PortalHeader({
 }
 
 // ─── PAGE ─────────────────────────────────────────────────────────────────────
-export default function ClientPortalPage() {
+export default function ClientPortalPage({
+  mustChangePassword = false,
+  onPasswordChanged,
+}: {
+  mustChangePassword?: boolean
+  onPasswordChanged?: () => void
+}) {
   const { toasts, add: showToast } = useLocalToast()
   const [selected, setSelected] = useState<Set<string>>(new Set(['p1']))
+  const [notifTick, setNotifTick] = useState(0)
+  const [showPwdModal, setShowPwdModal] = useState(mustChangePassword)
+
+  function handlePasswordSaved() {
+    setShowPwdModal(false)
+    onPasswordChanged?.()
+    showToast('Senha atualizada com sucesso.', 'success')
+  }
 
   function toggleProject(id: string) {
     setSelected(prev => {
@@ -926,6 +1302,11 @@ export default function ClientPortalPage() {
       next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
+  }
+
+  function handleNotifRead(msg: string) {
+    showToast(msg, 'info')
+    setNotifTick(t => t + 1)
   }
 
   const isSingle = selected.size === 1
@@ -937,7 +1318,12 @@ export default function ClientPortalPage() {
       className="flex flex-col h-full overflow-hidden"
       style={{ background: C.bg, fontFamily: 'system-ui, -apple-system, sans-serif' }}
     >
-      <PortalHeader selected={selected} onToggle={toggleProject} />
+      <PortalHeader
+        selected={selected}
+        onToggle={toggleProject}
+        notifTick={notifTick}
+        onNotifRead={handleNotifRead}
+      />
 
       {/* State label strip */}
       <div
@@ -967,7 +1353,10 @@ export default function ClientPortalPage() {
             {isSingle && singleProject && (
               <>
                 <ProgressCard project={singleProject} />
-                <SprintDeliveriesCard projectFilter={selected} onComment={showToast} />
+                <SprintDeliveriesCard
+                  projectFilter={selected}
+                  onComment={msg => { showToast(msg); setNotifTick(t => t + 1) }}
+                />
               </>
             )}
             {/* Card 3: Project count */}
@@ -987,6 +1376,9 @@ export default function ClientPortalPage() {
       </div>
 
       <LocalToastStack toasts={toasts} />
+
+      {/* Blocking first-access modal — cannot be dismissed without changing password */}
+      {showPwdModal && <ChangePasswordModal onSaved={handlePasswordSaved} />}
     </div>
   )
 }

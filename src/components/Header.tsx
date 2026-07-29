@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Avatar } from './ds/Avatar'
 import { T } from './ds/tokens'
-import { MOCK_USERS } from '../data/session'
+import { MOCK_USERS, MOCK_TENANT } from '../data/session'
 import { useSession } from '../data/SessionContext'
+import { getAllSignals, markReadByPo, type ClientSignal } from '../data/clientSignals'
 
 type View = 'home' | 'foundations' | 'dashboard' | 'project' | 'issue' | 'client' | 'task-drawer' | 'projects-list' | 'gantt' | 'calendar' | 'list' | 'timeline' | 'epics' | 'releases' | 'filters' | 'navigator' | 'reports' | 'automations' | 'config' | 'team' | 'my-tasks' | 'login' | 'role-dashboard' | 'client-access' | 'client-login'
 
@@ -64,23 +65,62 @@ function today() {
   return new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-const NOTIFICATIONS = [
-  { icon: '🔴', text: 'PM-142 bloqueado — aguardando você', time: '2h' },
-  { icon: '💬', text: 'João comentou em PM-158',             time: '3h' },
-  { icon: '✅', text: 'PM-164 foi aprovado pelo cliente',    time: '5h' },
-  { icon: '⚡', text: 'Sprint 14 termina em 3 dias',         time: '1d' },
+const STATIC_NOTIFICATIONS = [
+  { id: 'n1', icon: '🔴', text: 'PM-142 bloqueado — aguardando você', time: '2h',  read: false },
+  { id: 'n2', icon: '⚡', text: 'Sprint 14 termina em 3 dias',         time: '1d',  read: false },
 ]
+
+function signalToNotif(s: ClientSignal) {
+  const icon = s.type === 'comment' ? '💬' : '✅'
+  const label = s.type === 'comment' ? 'comentou em' : 'solicitou aprovação de'
+  const text = `${s.author} ${label} "${s.item_title}"`
+  const time = new Date(s.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+  return { id: s.id, icon, text, time, read: s.read_by_po, signalId: s.id }
+}
 
 export function Header({ currentView, onViewChange, onCreateIssue }: HeaderProps) {
   const [cmdOpen,    setCmdOpen]    = useState(false)
   const [notifOpen,  setNotifOpen]  = useState(false)
   const [switchOpen, setSwitchOpen] = useState(false)
-  const [readAll,    setReadAll]    = useState(false)
+  const [tick,       setTick]       = useState(0)
+  const [readStatic, setReadStatic] = useState<Set<string>>(new Set())
+
+  void tick
 
   const { activeUser, setActiveUser } = useSession()
   const rc         = activeUser.role_context
   const rcStyle    = ROLE_CONTEXT_COLOR[rc] ?? { color: T.accent, bg: T.accentDim }
   const rcLabel    = ROLE_CONTEXT_LABEL[rc] ?? rc
+
+  // Build merged notification list: unread client signals first, then static
+  const clientSignals = getAllSignals().filter(s => s.tenant_id === MOCK_TENANT.tenant_id)
+  const signalNotifs  = clientSignals.map(signalToNotif)
+  const unreadSignals = signalNotifs.filter(n => !n.read)
+  const readSignals   = signalNotifs.filter(n => n.read)
+  const NOTIFICATIONS = [
+    ...unreadSignals,
+    ...STATIC_NOTIFICATIONS.filter(n => !readStatic.has(n.id)),
+    ...readSignals,
+    ...STATIC_NOTIFICATIONS.filter(n => readStatic.has(n.id)),
+  ]
+  const unreadCount = unreadSignals.length + STATIC_NOTIFICATIONS.filter(n => !readStatic.has(n.id)).length
+
+  function handleMarkAllRead() {
+    clientSignals.forEach(s => markReadByPo(s.id))
+    setReadStatic(new Set(STATIC_NOTIFICATIONS.map(n => n.id)))
+    setTick(t => t + 1)
+  }
+
+  function handleNotifClick(n: typeof NOTIFICATIONS[number]) {
+    if ('signalId' in n && n.signalId) {
+      markReadByPo(n.signalId)
+      setTick(t => t + 1)
+    } else {
+      setReadStatic(prev => new Set([...prev, n.id]))
+    }
+    onViewChange('home')
+    setNotifOpen(false)
+  }
 
   function handleSwitchUser(userId: string) {
     setActiveUser(userId)
@@ -244,62 +284,59 @@ export function Header({ currentView, onViewChange, onCreateIssue }: HeaderProps
                 <path d="M8 1.5A4.5 4.5 0 0 0 3.5 6v3l-1 1.5h11L12.5 9V6A4.5 4.5 0 0 0 8 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
                 <path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" strokeWidth="1.3" />
               </svg>
-              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full" style={{ background: T.crit }} />
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 min-w-[14px] h-[14px] rounded-full flex items-center justify-center text-[8px] font-bold text-white px-0.5" style={{ background: T.crit }}>
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
             </button>
 
             {notifOpen && (
               <div
                 className="absolute right-0 top-full mt-1 z-50 py-1.5 fade-rise"
-                style={{ width: 300, background: T.bgSurface, border: `1px solid ${T.border2}`, borderRadius: 12, boxShadow: T.shadowModal }}
+                style={{ width: 320, background: T.bgSurface, border: `1px solid ${T.border2}`, borderRadius: 12, boxShadow: T.shadowModal, maxHeight: 420, overflowY: 'auto' }}
               >
                 <div className="flex items-center justify-between px-3 pb-1.5" style={{ borderBottom: `1px solid ${T.border}` }}>
-                  <p className="text-[12px] font-semibold" style={{ color: T.text1 }}>Notificações</p>
-                  <button className="text-[10px]" style={{ color: T.accent }} onClick={()=>setReadAll(true)}>{readAll?'✓ Lidas':'Marcar tudo como lido'}</button>
-                </div>
-                {NOTIFICATIONS.map((n, i) => (
-                  <button
-                    key={i}
-                    className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left transition-colors"
-                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
-                  >
-                    <span className="text-sm leading-none mt-0.5 flex-shrink-0">{n.icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[12px] leading-snug" style={{ color: T.text1 }}>{n.text}</p>
-                      <p className="text-[10px] mt-0.5" style={{ color: T.text3 }}>{n.time} atrás</p>
-                    </div>
-                    {!readAll && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5" style={{ background: T.accent }} />}
+                  <div className="flex items-center gap-2">
+                    <p className="text-[12px] font-semibold" style={{ color: T.text1 }}>Notificações</p>
+                    {unreadCount > 0 && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: T.crit, color: '#fff' }}>{unreadCount}</span>
+                    )}
+                  </div>
+                  <button className="text-[10px]" style={{ color: T.accent }} onClick={handleMarkAllRead}>
+                    Marcar tudo como lido
                   </button>
-                ))}
+                </div>
+                {NOTIFICATIONS.length === 0 ? (
+                  <p className="text-[12px] text-center py-4" style={{ color: T.text3 }}>Nenhuma notificação.</p>
+                ) : (
+                  NOTIFICATIONS.map((n) => {
+                    const isUnread = !n.read
+                    return (
+                      <button
+                        key={n.id}
+                        onClick={() => handleNotifClick(n)}
+                        className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left transition-colors"
+                        style={{ background: isUnread ? `${T.accent}06` : 'transparent' }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = isUnread ? `${T.accent}06` : 'transparent' }}
+                      >
+                        <span className="text-sm leading-none mt-0.5 flex-shrink-0">{n.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[12px] leading-snug" style={{ color: T.text1 }}>{n.text}</p>
+                          <p className="text-[10px] mt-0.5" style={{ color: T.text3 }}>{n.time}</p>
+                        </div>
+                        {isUnread && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5" style={{ background: T.accent }} />}
+                      </button>
+                    )
+                  })
+                )}
               </div>
             )}
           </div>
 
         </div>
       </header>
-
-      {/* Prototype nav strip */}
-      <div
-        className="flex items-center gap-0.5 px-3 py-1 overflow-x-auto flex-shrink-0"
-        style={{ background: `${T.bgPage}99`, borderBottom: `1px solid ${T.border}` }}
-      >
-        <span className="text-[9px] font-semibold uppercase tracking-wider mr-2 flex-shrink-0" style={{ color: T.text3 }}>
-          Protótipo:
-        </span>
-        {(Object.entries(viewLabels) as [View, string][]).map(([v, label]) => (
-          <button
-            key={v}
-            onClick={() => onViewChange(v)}
-            className="flex-shrink-0 px-2.5 py-1 rounded text-[11px] font-medium transition-all duration-150"
-            style={{
-              background: currentView === v ? `${T.accent}25` : 'transparent',
-              color: currentView === v ? T.accent : T.text3,
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
 
       {/* Cmd+K palette */}
       {cmdOpen && (
