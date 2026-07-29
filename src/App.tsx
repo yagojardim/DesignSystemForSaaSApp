@@ -114,7 +114,11 @@ function AppInner() {
     return (
       <div className="fixed inset-0 flex flex-col" style={{ background:'#0e1016' }}>
         <div className="flex-1 overflow-hidden">
-          <ClientPortalPage mustChangePassword={clientMustChangePwd} onPasswordChanged={() => setClientMustChangePwd(false)} />
+          <ClientPortalPage
+            mustChangePassword={clientMustChangePwd}
+            onPasswordChanged={() => setClientMustChangePwd(false)}
+            onLogout={() => setView('client-login')}
+          />
         </div>
       </div>
     )

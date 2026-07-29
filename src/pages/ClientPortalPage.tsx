@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   addClientSignal, getSignalsForItem, markReadByPo,
   getClientUnreadReplies, markReplyReadByClient, markAllClientRepliesRead,
-  type ClientSignal,
+  getSignalsForProject, type ClientSignal,
 } from '../data/clientSignals'
 import { getClientPermissions, getClientAccess, updateClientPassword } from '../data/clientAccess'
 import { MOCK_TENANT } from '../data/session'
@@ -93,7 +93,10 @@ function CardShell({ children, className = '', style = {} }: { children: React.R
       className={`flex flex-col ${className}`}
       style={{
         background: C.surface,
-        border: `1px solid ${C.border}`,
+        borderTop: `1px solid ${C.border}`,
+        borderRight: `1px solid ${C.border}`,
+        borderBottom: `1px solid ${C.border}`,
+        borderLeft: `1px solid ${C.border}`,
         borderRadius: C.radius,
         boxShadow: '0 4px 24px rgba(0,0,0,0.28)',
         ...style,
@@ -993,7 +996,7 @@ function validateNewPassword(pwd: string): string[] {
   return errors
 }
 
-function ChangePasswordModal({ onSaved }: { onSaved: () => void }) {
+function ChangePasswordModal({ onSaved, onClose, voluntary = false }: { onSaved: () => void; onClose?: () => void; voluntary?: boolean }) {
   const [pwd1, setPwd1]       = useState('')
   const [pwd2, setPwd2]       = useState('')
   const [show1, setShow1]     = useState(false)
@@ -1039,7 +1042,7 @@ function ChangePasswordModal({ onSaved }: { onSaved: () => void }) {
         }}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 mb-5">
+        <div className="flex items-start gap-3 mb-5">
           <div
             className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
             style={{ background: `${C.accent}18`, border: `1px solid ${C.accent}30` }}
@@ -1050,10 +1053,25 @@ function ChangePasswordModal({ onSaved }: { onSaved: () => void }) {
               <circle cx="9" cy="12.5" r="1" fill="currentColor" />
             </svg>
           </div>
-          <div>
-            <p className="text-base font-bold" style={{ color: C.txt }}>Primeiro acesso</p>
-            <p className="text-xs mt-0.5" style={{ color: C.txt3 }}>Por segurança, defina uma nova senha antes de continuar.</p>
+          <div className="flex-1">
+            <p className="text-base font-bold" style={{ color: C.txt }}>
+              {voluntary ? 'Alterar senha' : 'Primeiro acesso'}
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: C.txt3 }}>
+              {voluntary ? 'Atualize sua senha de acesso ao portal.' : 'Por segurança, defina uma nova senha antes de continuar.'}
+            </p>
           </div>
+          {onClose && (
+            <button
+              onClick={onClose}
+              aria-label="Fechar"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.txt3, padding: '2px 6px', fontSize: 20, lineHeight: 1, flexShrink: 0 }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = C.txt }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = C.txt3 }}
+            >
+              ×
+            </button>
+          )}
         </div>
 
         {/* Field 1 */}
@@ -1157,6 +1175,499 @@ function ChangePasswordModal({ onSaved }: { onSaved: () => void }) {
   )
 }
 
+// ─── CLIENT PROFILE MENU ─────────────────────────────────────────────────────
+function ClientProfileMenu({
+  onLogout, onChangePassword,
+}: {
+  onLogout: () => void; onChangePassword: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function close(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [])
+
+  const menuItems = [
+    {
+      label: 'Meu perfil',
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <circle cx="7" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M2 12c0-2.76 2.24-5 5-5s5 2.24 5 5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      ),
+      action: () => { setOpen(false) },
+      disabled: true,
+    },
+    {
+      label: 'Alterar senha',
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <rect x="2" y="6" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M4.5 6V4.5a2.5 2.5 0 015 0V6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          <circle cx="7" cy="9.5" r="1" fill="currentColor" />
+        </svg>
+      ),
+      action: () => { setOpen(false); onChangePassword() },
+    },
+    {
+      label: 'Sair',
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M5 12H3a1 1 0 01-1-1V3a1 1 0 011-1h2M9 10l3-3-3-3M12 7H5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ),
+      action: () => { setOpen(false); onLogout() },
+      danger: true,
+    },
+  ]
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        aria-label="Menu de perfil"
+        className="flex items-center gap-2 h-9 px-2 rounded-xl transition-all"
+        style={{
+          background: open ? `${C.accent}18` : C.surface2,
+          border: `1px solid ${open ? C.accent + '60' : C.border}`,
+        }}
+        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.accent + '60' }}
+        onMouseLeave={e => { if (!open) (e.currentTarget as HTMLButtonElement).style.borderColor = C.border }}
+      >
+        {/* Avatar */}
+        <div
+          className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold flex-shrink-0"
+          style={{ background: `linear-gradient(135deg, ${C.accent}, #5b6ef7)`, color: '#fff' }}
+        >
+          JS
+        </div>
+        <span className="text-xs font-medium hidden sm:block" style={{ color: C.txt }}>João Silva</span>
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ color: C.txt3, flexShrink: 0 }}>
+          <path d="M2.5 4L5 6.5L7.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          className="absolute top-full right-0 mt-2 z-50 py-1 fade-rise"
+          style={{
+            background: C.surface,
+            border: `1px solid ${C.border}`,
+            borderRadius: 12,
+            boxShadow: '0 24px 64px rgba(0,0,0,0.56)',
+            minWidth: 200,
+          }}
+        >
+          {/* Profile info row */}
+          <div className="px-4 py-3" style={{ borderBottom: `1px solid ${C.border}` }}>
+            <div className="flex items-center gap-2.5">
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-[11px] font-bold flex-shrink-0"
+                style={{ background: `linear-gradient(135deg, ${C.accent}, #5b6ef7)`, color: '#fff' }}
+              >
+                JS
+              </div>
+              <div>
+                <p className="text-xs font-semibold" style={{ color: C.txt }}>João Silva</p>
+                <p className="text-[10px]" style={{ color: C.txt3 }}>joao.silva@cliente.com</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Menu items */}
+          <div className="py-1">
+            {menuItems.map(item => (
+              <button
+                key={item.label}
+                onClick={item.action}
+                disabled={item.disabled}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: item.disabled ? 'default' : 'pointer',
+                  color: item.danger ? C.crit : item.disabled ? C.txt3 : C.txt2,
+                  opacity: item.disabled ? 0.5 : 1,
+                }}
+                onMouseEnter={e => {
+                  if (!item.disabled) {
+                    (e.currentTarget as HTMLButtonElement).style.background = item.danger ? `${C.crit}10` : `${C.accent}08`
+                    if (!item.danger) (e.currentTarget as HTMLButtonElement).style.color = C.txt
+                  }
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+                  (e.currentTarget as HTMLButtonElement).style.color = item.danger ? C.crit : item.disabled ? C.txt3 : C.txt2;
+                }}
+              >
+                <span style={{ color: 'inherit', flexShrink: 0 }}>{item.icon}</span>
+                <span className="text-xs">{item.label}</span>
+                {item.disabled && (
+                  <span
+                    className="ml-auto text-[9px] px-1.5 py-0.5 rounded"
+                    style={{ background: C.border, color: C.txt3 }}
+                  >
+                    em breve
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Footer */}
+          <div
+            className="px-4 py-2 text-[9px] text-center"
+            style={{ borderTop: `1px solid ${C.border}`, color: C.txt3 }}
+          >
+            Inspection Mode · Dash View by Altech
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── CLIENT CHAT ──────────────────────────────────────────────────────────────
+interface ChatBubble {
+  id: string
+  side: 'client' | 'management'
+  author: string
+  initials: string
+  body: string
+  timestamp: string
+  badge?: string
+  itemTitle?: string
+}
+
+function flattenClientThread(signals: ClientSignal[], clientAuthor: string): ChatBubble[] {
+  const bubbles: ChatBubble[] = []
+  for (const sig of signals) {
+    const isClientSig = sig.author === clientAuthor && sig.source !== 'management'
+    const isMgmtSig = sig.source === 'management'
+    if (!isClientSig && !isMgmtSig) continue
+
+    if (isClientSig) {
+      bubbles.push({
+        id: sig.id,
+        side: 'client',
+        author: clientAuthor,
+        initials: 'JS',
+        body: sig.body ?? (sig.type === 'approval' ? '✓ Item aprovado' : ''),
+        timestamp: sig.created_at,
+        badge: sig.type === 'approval' ? '✓ Aprovação' : undefined,
+        itemTitle: sig.item_title,
+      })
+    } else {
+      const inits = sig.author.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+      bubbles.push({
+        id: sig.id,
+        side: 'management',
+        author: sig.author,
+        initials: inits,
+        body: sig.body ?? '',
+        timestamp: sig.created_at,
+        itemTitle: sig.item_title,
+      })
+    }
+
+    // PO reply on a client signal
+    if (sig.po_reply && isClientSig) {
+      const replyTs = new Date(sig.created_at)
+      replyTs.setSeconds(replyTs.getSeconds() + 60)
+      bubbles.push({
+        id: `${sig.id}_r`,
+        side: 'management',
+        author: sig.po_reply_by ?? 'Equipe Altech',
+        initials: 'EA',
+        body: sig.po_reply,
+        timestamp: replyTs.toISOString(),
+        itemTitle: sig.item_title,
+      })
+    }
+  }
+  bubbles.sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+  return bubbles
+}
+
+function fmtTime(iso: string) {
+  try {
+    return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  } catch { return '' }
+}
+
+function fmtDay(iso: string) {
+  try {
+    return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+  } catch { return '' }
+}
+
+function sigProjectId(sigProject: string): string | null {
+  const p = PROJECTS.find(
+    proj => proj.name === sigProject || sigProject.startsWith(proj.name) || proj.name.startsWith(sigProject),
+  )
+  return p?.id ?? null
+}
+
+function ClientChatPanel({ onToast }: { onToast: (msg: string) => void }) {
+  const [selId, setSelId] = useState(PROJECTS[0].id)
+  const [draft, setDraft] = useState('')
+  const [tick, setTick] = useState(0)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  void tick
+
+  // Unread per project (management replies the client hasn't read)
+  const allUnread = getClientUnreadReplies(MOCK_TENANT.tenant_id, CLIENT_AUTHOR)
+  const unreadByProject = new Map<string, number>()
+  for (const sig of allUnread) {
+    const pid = sigProjectId(sig.project)
+    if (pid) unreadByProject.set(pid, (unreadByProject.get(pid) ?? 0) + 1)
+  }
+
+  const project = PROJECTS.find(p => p.id === selId)!
+  const rawSignals = getSignalsForProject(project.name, MOCK_TENANT.tenant_id)
+  const thread = flattenClientThread(rawSignals, CLIENT_AUTHOR)
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+  }, [selId, tick])
+
+  function handleSend() {
+    const body = draft.trim()
+    if (!body) return
+    addClientSignal({
+      project: project.name,
+      tenant_id: MOCK_TENANT.tenant_id,
+      type: 'comment',
+      body,
+      author: CLIENT_AUTHOR,
+      author_initials: 'JS',
+      item_id: `portal-chat-${Date.now()}`,
+      item_title: 'Chat geral do projeto',
+      responsible_po: 'u_po',
+      severity: 'low',
+    })
+    setDraft('')
+    setTick(t => t + 1)
+    onToast('Mensagem enviada.')
+  }
+
+  // Group thread by day
+  type DayGroup = { day: string; bubbles: ChatBubble[] }
+  const grouped: DayGroup[] = []
+  for (const b of thread) {
+    const day = new Date(b.timestamp).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+    const last = grouped[grouped.length - 1]
+    if (last && last.day === day) { last.bubbles.push(b) }
+    else grouped.push({ day, bubbles: [b] })
+  }
+
+  return (
+    <div className="flex h-full overflow-hidden">
+      {/* Left: project list */}
+      <div
+        className="flex-shrink-0 flex flex-col overflow-y-auto"
+        style={{ width: 240, borderRight: `1px solid ${C.border}`, background: C.surface }}
+      >
+        <div className="px-4 py-3 flex-shrink-0" style={{ borderBottom: `1px solid ${C.border}` }}>
+          <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: C.txt3 }}>
+            Seus projetos
+          </p>
+        </div>
+        {PROJECTS.map(p => {
+          const active = p.id === selId
+          const unread = unreadByProject.get(p.id) ?? 0
+          return (
+            <button
+              key={p.id}
+              onClick={() => setSelId(p.id)}
+              className="w-full flex items-start gap-3 px-4 py-3 text-left transition-colors border-0"
+              style={{
+                background: active ? `${C.accent}12` : 'transparent',
+                borderLeft: `3px solid ${active ? C.accent : 'transparent'}`,
+                cursor: 'pointer',
+              }}
+              onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = `${C.accent}06` }}
+              onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+            >
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-[9px] font-bold flex-shrink-0 mt-0.5"
+                style={{ background: active ? `${C.accent}28` : C.surface2, color: active ? C.accent : C.txt3, border: `1px solid ${active ? C.accent + '40' : C.border}` }}
+              >
+                {p.name.slice(0, 2).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-xs font-semibold truncate flex-1" style={{ color: active ? C.txt : C.txt2 }}>
+                    {p.name}
+                  </p>
+                  {unread > 0 && (
+                    <span
+                      className="min-w-[18px] h-[18px] rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0"
+                      style={{ background: C.crit, color: '#fff', padding: '0 3px' }}
+                    >
+                      {unread}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] mt-0.5" style={{ color: C.txt3 }}>{p.sprint}</p>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Right: thread + composer */}
+      <div className="flex-1 flex flex-col overflow-hidden" style={{ background: C.bg }}>
+        {/* Thread header */}
+        <div
+          className="flex items-center gap-3 px-6 py-3 flex-shrink-0"
+          style={{ borderBottom: `1px solid ${C.border}`, background: C.surface }}
+        >
+          <div
+            className="w-8 h-8 rounded-xl flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+            style={{ background: `${C.accent}20`, color: C.accent, border: `1px solid ${C.accent}30` }}
+          >
+            {project.name.slice(0, 2).toUpperCase()}
+          </div>
+          <div>
+            <p className="text-sm font-semibold" style={{ color: C.txt }}>{project.name}</p>
+            <p className="text-[10px]" style={{ color: C.txt3 }}>{project.sprint} · Chat com a equipe</p>
+          </div>
+        </div>
+
+        {/* Messages */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-5 space-y-1">
+          {grouped.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
+              <div
+                className="w-14 h-14 rounded-2xl flex items-center justify-center"
+                style={{ background: C.surface, border: `1px solid ${C.border}` }}
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ color: C.txt3 }}>
+                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: C.txt }}>Nenhuma mensagem ainda</p>
+                <p className="text-xs mt-1" style={{ color: C.txt3 }}>Envie uma mensagem para iniciar a conversa.</p>
+              </div>
+            </div>
+          ) : (
+            grouped.map(group => (
+              <div key={group.day}>
+                {/* Day separator */}
+                <div className="flex items-center gap-3 my-4">
+                  <div className="flex-1 h-px" style={{ background: C.border }} />
+                  <span className="text-[10px] px-2" style={{ color: C.txt3 }}>{group.day}</span>
+                  <div className="flex-1 h-px" style={{ background: C.border }} />
+                </div>
+                {group.bubbles.map(b => {
+                  const isClient = b.side === 'client'
+                  return (
+                    <div
+                      key={b.id}
+                      className={`flex items-end gap-2.5 mb-3 ${isClient ? 'flex-row-reverse' : ''}`}
+                    >
+                      {/* Avatar */}
+                      <div
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0"
+                        style={{
+                          background: isClient ? `linear-gradient(135deg, ${C.accent}, #5b6ef7)` : `${C.success}28`,
+                          color: isClient ? '#fff' : C.success,
+                          border: `1px solid ${isClient ? C.accent + '40' : C.success + '30'}`,
+                        }}
+                      >
+                        {b.initials}
+                      </div>
+
+                      {/* Bubble */}
+                      <div
+                        className={`max-w-[70%] rounded-2xl px-4 py-2.5 ${isClient ? 'rounded-br-sm' : 'rounded-bl-sm'}`}
+                        style={{
+                          background: isClient ? `${C.accent}22` : C.surface,
+                          border: `1px solid ${isClient ? C.accent + '30' : C.border}`,
+                        }}
+                      >
+                        <div className="flex items-baseline gap-2 mb-1">
+                          <span className="text-[10px] font-semibold" style={{ color: isClient ? C.accent : C.success }}>
+                            {b.author}
+                          </span>
+                          {b.badge && (
+                            <span
+                              className="text-[9px] px-1.5 py-0.5 rounded-full"
+                              style={{ background: `${C.success}20`, color: C.success, border: `1px solid ${C.success}30` }}
+                            >
+                              {b.badge}
+                            </span>
+                          )}
+                        </div>
+                        {b.itemTitle && b.itemTitle !== 'Chat geral do projeto' && (
+                          <p className="text-[9px] mb-1" style={{ color: C.txt3 }}>
+                            re: {b.itemTitle}
+                          </p>
+                        )}
+                        <p className="text-[12px] leading-relaxed" style={{ color: C.txt }}>{b.body}</p>
+                        <p className="text-[9px] mt-1 text-right" style={{ color: C.txt3 }}>{fmtTime(b.timestamp)}</p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Composer */}
+        <div
+          className="flex-shrink-0 px-6 py-4"
+          style={{ borderTop: `1px solid ${C.border}`, background: C.surface }}
+        >
+          <div
+            className="flex items-end gap-3 rounded-2xl px-4 py-3"
+            style={{ background: C.surface2, border: `1px solid ${C.border2}` }}
+          >
+            <textarea
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
+              placeholder="Digite uma mensagem para a equipe… (Enter para enviar)"
+              rows={1}
+              className="flex-1 resize-none bg-transparent text-[13px] outline-none"
+              style={{
+                color: C.txt, fontFamily: 'inherit',
+                maxHeight: 80, overflowY: 'auto',
+              }}
+            />
+            <button
+              onClick={handleSend}
+              disabled={!draft.trim()}
+              className="flex-shrink-0 h-8 px-4 rounded-xl text-[12px] font-semibold transition-all"
+              style={{
+                background: draft.trim() ? C.accent : C.border2,
+                color: draft.trim() ? '#fff' : C.txt3,
+                border: 'none',
+                cursor: draft.trim() ? 'pointer' : 'not-allowed',
+              }}
+            >
+              Enviar
+            </button>
+          </div>
+          <p className="text-[9px] mt-2 text-center" style={{ color: C.txt3 }}>
+            Suas mensagens são visíveis para a equipe Altech · Inspection Mode
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── PROJECT SELECTOR ────────────────────────────────────────────────────────
 function ProjectSelector({ selected, onToggle }: { selected: Set<string>; onToggle: (id: string) => void }) {
   const [open, setOpen] = useState(false)
@@ -1236,10 +1747,15 @@ function ProjectSelector({ selected, onToggle }: { selected: Set<string>; onTogg
 // ─── PORTAL HEADER ────────────────────────────────────────────────────────────
 function PortalHeader({
   selected, onToggle, notifTick, onNotifRead,
+  isChatMode, onChatToggle, onLogout, onChangePasswordRequest,
 }: {
   selected: Set<string>; onToggle: (id: string) => void
   notifTick: number; onNotifRead: (msg: string) => void
+  isChatMode: boolean; onChatToggle: () => void
+  onLogout: () => void; onChangePasswordRequest: () => void
 }) {
+  const unreadCount = getClientUnreadReplies(MOCK_TENANT.tenant_id, CLIENT_AUTHOR).length
+
   return (
     <header
       className="flex items-center justify-between gap-4 px-8 py-3 flex-shrink-0"
@@ -1259,19 +1775,50 @@ function PortalHeader({
         </div>
       </div>
 
-      {/* Center: project selector */}
+      {/* Center: project selector or tab label */}
       <div className="flex items-center gap-3 flex-1 justify-center">
-        <ProjectSelector selected={selected} onToggle={onToggle} />
+        {!isChatMode
+          ? <ProjectSelector selected={selected} onToggle={onToggle} />
+          : (
+            <span className="text-sm font-semibold" style={{ color: C.txt }}>
+              Minhas mensagens
+            </span>
+          )
+        }
       </div>
 
-      {/* Right: notification bell + date */}
-      <div className="flex items-center gap-3 flex-shrink-0">
+      {/* Right: chat toggle + bell + profile */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Chat / Dashboard toggle */}
+        <button
+          onClick={onChatToggle}
+          className="relative flex items-center gap-2 h-9 px-3 rounded-xl text-xs font-semibold transition-all"
+          style={{
+            background: isChatMode ? `${C.accent}18` : C.surface2,
+            border: `1px solid ${isChatMode ? C.accent + '60' : C.border}`,
+            color: isChatMode ? C.accent : C.txt2,
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.accent + '60'; (e.currentTarget as HTMLButtonElement).style.color = C.accent }}
+          onMouseLeave={e => { if (!isChatMode) { (e.currentTarget as HTMLButtonElement).style.borderColor = C.border; (e.currentTarget as HTMLButtonElement).style.color = C.txt2 } }}
+          aria-label={isChatMode ? 'Voltar ao dashboard' : 'Abrir mensagens'}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M12 9a1 1 0 01-1 1H4l-2 2V3a1 1 0 011-1h8a1 1 0 011 1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+          </svg>
+          <span>{isChatMode ? 'Dashboard' : 'Mensagens'}</span>
+          {!isChatMode && unreadCount > 0 && (
+            <span
+              className="min-w-[16px] h-4 rounded-full flex items-center justify-center text-[9px] font-bold"
+              style={{ background: C.crit, color: '#fff', padding: '0 3px' }}
+            >
+              {unreadCount}
+            </span>
+          )}
+        </button>
+
         <ClientNotifBell tick={notifTick} onRead={onNotifRead} />
 
-        <div className="text-right">
-          <p className="text-xs font-medium" style={{ color: C.txt }}>25 jul 2025</p>
-          <p className="text-[10px]" style={{ color: C.txt3 }}>Atualizado agora</p>
-        </div>
+        <ClientProfileMenu onLogout={onLogout} onChangePassword={onChangePasswordRequest} />
       </div>
     </header>
   )
@@ -1281,17 +1828,22 @@ function PortalHeader({
 export default function ClientPortalPage({
   mustChangePassword = false,
   onPasswordChanged,
+  onLogout,
 }: {
   mustChangePassword?: boolean
   onPasswordChanged?: () => void
+  onLogout?: () => void
 }) {
   const { toasts, add: showToast } = useLocalToast()
   const [selected, setSelected] = useState<Set<string>>(new Set(['p1']))
   const [notifTick, setNotifTick] = useState(0)
   const [showPwdModal, setShowPwdModal] = useState(mustChangePassword)
+  const [showVoluntaryPwdModal, setShowVoluntaryPwdModal] = useState(false)
+  const [portalView, setPortalView] = useState<'dashboard' | 'chat'>('dashboard')
 
   function handlePasswordSaved() {
     setShowPwdModal(false)
+    setShowVoluntaryPwdModal(false)
     onPasswordChanged?.()
     showToast('Senha atualizada com sucesso.', 'success')
   }
@@ -1323,62 +1875,76 @@ export default function ClientPortalPage({
         onToggle={toggleProject}
         notifTick={notifTick}
         onNotifRead={handleNotifRead}
+        isChatMode={portalView === 'chat'}
+        onChatToggle={() => setPortalView(v => v === 'chat' ? 'dashboard' : 'chat')}
+        onLogout={onLogout ?? (() => {})}
+        onChangePasswordRequest={() => setShowVoluntaryPwdModal(true)}
       />
 
-      {/* State label strip */}
-      <div
-        className="flex items-center gap-2 px-8 py-2 flex-shrink-0"
-        style={{ background: `${C.accent}08`, borderBottom: `1px solid ${C.border}` }}
-      >
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ color: C.accent }}>
-          <circle cx="5" cy="5" r="4" stroke="currentColor" strokeWidth="1.2" />
-          <path d="M5 4v3M5 3v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-        </svg>
-        <span className="text-[11px]" style={{ color: C.txt3 }}>
-          {isEmpty
-            ? 'Selecione um projeto no seletor acima'
-            : isSingle
-              ? `Visualizando: ${singleProject?.name} — ${singleProject?.sprint}`
-              : `Visão consolidada: ${selected.size} projetos selecionados`}
-        </span>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto px-8 py-6">
-        {isEmpty ? (
-          <EmptyState />
-        ) : (
-          <div className="grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', alignItems: 'start' }}>
-            {/* Cards 1 & 2: single-project only */}
-            {isSingle && singleProject && (
-              <>
-                <ProgressCard project={singleProject} />
-                <SprintDeliveriesCard
-                  projectFilter={selected}
-                  onComment={msg => { showToast(msg); setNotifTick(t => t + 1) }}
-                />
-              </>
-            )}
-            {/* Card 3: Project count */}
-            <ProjectCountCard count={PROJECTS.length} />
-            {/* Card 4: Active sprint */}
-            <ActiveSprintCard />
-            {/* Card 5: Risks */}
-            <RisksCard />
-            {/* Card 6: Awaiting validation (action required) */}
-            <ValidationCard onComment={showToast} />
-            {/* Card 7: Published roadmap */}
-            <RoadmapCard />
-            {/* Card 8: Recent deliveries */}
-            <RecentDeliveriesCard />
+      {portalView === 'chat' ? (
+        <div className="flex-1 overflow-hidden">
+          <ClientChatPanel onToast={msg => showToast(msg, 'info')} />
+        </div>
+      ) : (
+        <>
+          {/* State label strip */}
+          <div
+            className="flex items-center gap-2 px-8 py-2 flex-shrink-0"
+            style={{ background: `${C.accent}08`, borderBottom: `1px solid ${C.border}` }}
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ color: C.accent }}>
+              <circle cx="5" cy="5" r="4" stroke="currentColor" strokeWidth="1.2" />
+              <path d="M5 4v3M5 3v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+            </svg>
+            <span className="text-[11px]" style={{ color: C.txt3 }}>
+              {isEmpty
+                ? 'Selecione um projeto no seletor acima'
+                : isSingle
+                  ? `Visualizando: ${singleProject?.name} — ${singleProject?.sprint}`
+                  : `Visão consolidada: ${selected.size} projetos selecionados`}
+            </span>
           </div>
-        )}
-      </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto px-8 py-6">
+            {isEmpty ? (
+              <EmptyState />
+            ) : (
+              <div className="grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', alignItems: 'start' }}>
+                {isSingle && singleProject && (
+                  <>
+                    <ProgressCard project={singleProject} />
+                    <SprintDeliveriesCard
+                      projectFilter={selected}
+                      onComment={msg => { showToast(msg); setNotifTick(t => t + 1) }}
+                    />
+                  </>
+                )}
+                <ProjectCountCard count={PROJECTS.length} />
+                <ActiveSprintCard />
+                <RisksCard />
+                <ValidationCard onComment={showToast} />
+                <RoadmapCard />
+                <RecentDeliveriesCard />
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       <LocalToastStack toasts={toasts} />
 
-      {/* Blocking first-access modal — cannot be dismissed without changing password */}
+      {/* Blocking first-access modal */}
       {showPwdModal && <ChangePasswordModal onSaved={handlePasswordSaved} />}
+
+      {/* Voluntary password change modal */}
+      {showVoluntaryPwdModal && (
+        <ChangePasswordModal
+          onSaved={handlePasswordSaved}
+          onClose={() => setShowVoluntaryPwdModal(false)}
+          voluntary
+        />
+      )}
     </div>
   )
 }
