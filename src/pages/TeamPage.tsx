@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { T } from '../components/ds/tokens'
 import {
   MOCK_USERS, MOCK_TENANT, DASHBOARD_CATALOG,
@@ -11,11 +11,15 @@ import {
 } from '../data/permissions'
 import { useSession } from '../data/SessionContext'
 import { can } from '../data/permissions'
+import {
+  getInvitesForTenant, cancelInvite, resendInvite,
+  countPendingInvites, type Invite, type InviteStatus,
+} from '../data/invites'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type UserWithStatus = MockUser & { status?: 'active' | 'inactive' | 'blocked' }
-type Tab = 'membros' | 'permissoes' | 'dashboards'
+type Tab = 'membros' | 'convites' | 'permissoes' | 'dashboards'
 
 // ─── Audit log (session-persistent) ──────────────────────────────────────────
 
@@ -130,9 +134,10 @@ function inputStyle(): React.CSSProperties {
   return { width:'100%', background:T.bgSurface2, border:`1px solid ${T.border2}`, borderRadius:8, color:T.text1, padding:'7px 11px', fontSize:13, outline:'none', boxSizing:'border-box' as const }
 }
 
-function TabBar({ active, onChange }: { active:Tab; onChange:(t:Tab)=>void }) {
-  const tabs: { id:Tab; label:string }[] = [
+function TabBar({ active, onChange, pendingCount }: { active:Tab; onChange:(t:Tab)=>void; pendingCount:number }) {
+  const tabs: { id:Tab; label:string; badge?:number }[] = [
     { id:'membros',    label:'Membros' },
+    { id:'convites',   label:'Convites', badge: pendingCount > 0 ? pendingCount : undefined },
     { id:'permissoes', label:'Matriz de Permissões' },
     { id:'dashboards', label:'Dashboards' },
   ]
@@ -144,7 +149,15 @@ function TabBar({ active, onChange }: { active:Tab; onChange:(t:Tab)=>void }) {
           color:active===t.id?T.text1:T.text2, background:'transparent',
           borderBottom:active===t.id?`2px solid ${T.accent}`:'2px solid transparent',
           transition:'all 0.15s', marginBottom:-1,
-        }}>{t.label}</button>
+          display:'flex', alignItems:'center', gap:6,
+        }}>
+          {t.label}
+          {t.badge !== undefined && (
+            <span style={{ fontSize:10, fontWeight:700, background:T.warn, color:'#fff', borderRadius:99, padding:'0px 6px', lineHeight:'16px' }}>
+              {t.badge}
+            </span>
+          )}
+        </button>
       ))}
     </div>
   )
@@ -891,16 +904,229 @@ function PermissionDenied() {
   )
 }
 
+// ─── Invites tab ──────────────────────────────────────────────────────────────
+
+function expiryLabel(isoDate: string): { text: string; color: string } {
+  const diff = new Date(isoDate).getTime() - Date.now()
+  const days = Math.floor(diff / 86400000)
+  if (days < 0) return { text: 'Expirado', color: T.crit }
+  if (days === 0) return { text: 'Expira hoje', color: T.crit }
+  if (days <= 2) return { text: `Expira em ${days}d`, color: T.warn }
+  return { text: `Expira em ${days}d`, color: T.text3 }
+}
+
+const INVITE_STATUS_META: Record<InviteStatus, { label: string; color: string; bg: string }> = {
+  pending:  { label: 'Pendente',  color: T.warn,    bg: T.warnDim },
+  expired:  { label: 'Expirado',  color: T.crit,    bg: T.critDim },
+  accepted: { label: 'Aceito',    color: T.success,  bg: `${T.success}14` },
+}
+
+function InvitesTab({ onInvite, canManage, tenantId, inviterName }: {
+  onInvite: () => void; canManage: boolean; tenantId: string; inviterName: string
+}) {
+  const [filter, setFilter] = useState<'pending' | 'expired' | 'all'>('pending')
+  const [toast, setToast] = useState<string | null>(null)
+  const [tick, setTick] = useState(0)
+
+  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(null), 3000) }
+  function refresh() { setTick(t => t + 1) }
+  void tick
+
+  const all = getInvitesForTenant(tenantId)
+  const visible = filter === 'all' ? all : all.filter(i => i.status === filter)
+
+  const counts = {
+    pending:  all.filter(i => i.status === 'pending').length,
+    expired:  all.filter(i => i.status === 'expired').length,
+    accepted: all.filter(i => i.status === 'accepted').length,
+  }
+
+  function handleResend(inv: Invite) {
+    resendInvite(inv.id, inviterName)
+    refresh()
+    showToast(`Convite reenviado para ${inv.email} — expira em 7 dias.`)
+  }
+
+  function handleCancel(inv: Invite) {
+    cancelInvite(inv.id, inviterName)
+    refresh()
+    showToast(`Convite de ${inv.name} cancelado.`)
+  }
+
+  function handleCopyLink(inv: Invite) {
+    const fakeLink = `https://app.altech.io/convite/${inv.link_token}`
+    navigator.clipboard.writeText(fakeLink).catch(() => {})
+    showToast(`Link copiado: …/convite/${inv.link_token}`)
+  }
+
+  return (
+    <div>
+      {toast && (
+        <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:T.bgSurface, border:`1px solid ${T.border}`, borderRadius:10, padding:'11px 18px', color:T.text1, fontSize:13, boxShadow:'0 8px 32px rgba(0,0,0,0.4)' }}>
+          {toast}
+        </div>
+      )}
+
+      {/* Header row */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          {(['pending','expired','all'] as const).map(f => {
+            const label = f === 'pending' ? `Pendentes (${counts.pending})` : f === 'expired' ? `Expirados (${counts.expired})` : `Todos (${all.length})`
+            return (
+              <button key={f} onClick={() => setFilter(f)} style={{
+                padding:'5px 12px', borderRadius:6, fontSize:12, fontWeight: filter===f ? 600 : 400,
+                background: filter===f ? T.accentDim : 'transparent',
+                color: filter===f ? T.accent : T.text2,
+                border:`1px solid ${filter===f ? T.accentBorder : T.border}`,
+              }}>{label}</button>
+            )
+          })}
+        </div>
+        {canManage && (
+          <button onClick={onInvite} style={{
+            padding:'7px 16px', borderRadius:8, fontSize:13, fontWeight:600,
+            background:T.accent, color:'#fff', border:'none', cursor:'pointer',
+            display:'flex', alignItems:'center', gap:6,
+          }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="#fff" strokeWidth="1.8" strokeLinecap="round"/></svg>
+            Convidar membro
+          </button>
+        )}
+      </div>
+
+      {/* Table */}
+      <div style={{ background:T.bgSurface, borderRadius:12, border:`1px solid ${T.border}`, overflow:'hidden' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse' }}>
+          <thead>
+            <tr style={{ borderBottom:`1px solid ${T.border}` }}>
+              {['Convidado','Função','Squad','Convidado por','Expira em','Status','Ações'].map(col => (
+                <th key={col} style={{ padding:'10px 16px', textAlign:'left', fontSize:11, fontWeight:600, color:T.text3, letterSpacing:'0.06em', textTransform:'uppercase', whiteSpace:'nowrap' }}>{col}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {visible.length === 0 && (
+              <tr>
+                <td colSpan={7} style={{ padding:'32px 16px', textAlign:'center', color:T.text3, fontSize:13 }}>
+                  Nenhum convite {filter === 'pending' ? 'pendente' : filter === 'expired' ? 'expirado' : ''} encontrado.
+                </td>
+              </tr>
+            )}
+            {visible.map((inv, i) => {
+              const isLast = i === visible.length - 1
+              const expiry = expiryLabel(inv.expires_at)
+              const stMeta = INVITE_STATUS_META[inv.status]
+              const isPending = inv.status === 'pending'
+              const isExpired = inv.status === 'expired'
+              const initials = inv.name.split(' ').slice(0,2).map(s=>s[0]).join('').toUpperCase()
+              const hue = inv.email.charCodeAt(0) % 360
+              return (
+                <tr key={inv.id}
+                  style={{ borderBottom:isLast?'none':`1px solid ${T.border}`, transition:'background 0.1s' }}
+                  onMouseEnter={e=>{(e.currentTarget as HTMLTableRowElement).style.background=`${T.text3}08`}}
+                  onMouseLeave={e=>{(e.currentTarget as HTMLTableRowElement).style.background='transparent'}}>
+
+                  {/* Convidado */}
+                  <td style={{ padding:'12px 16px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                      <div style={{ width:32, height:32, borderRadius:'50%', background:`hsl(${hue},55%,28%)`, border:`1px solid hsl(${hue},55%,38%)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:`hsl(${hue},80%,80%)`, flexShrink:0 }}>
+                        {initials}
+                      </div>
+                      <div>
+                        <div style={{ fontSize:13, fontWeight:600, color:T.text1 }}>{inv.name}</div>
+                        <div style={{ fontSize:11, color:T.text3 }}>{inv.email}</div>
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* Função */}
+                  <td style={{ padding:'12px 16px' }}>
+                    <span style={{ fontSize:11, fontWeight:600, color:ROLE_COLORS[inv.role_context], background:`${ROLE_COLORS[inv.role_context]}18`, border:`1px solid ${ROLE_COLORS[inv.role_context]}33`, borderRadius:5, padding:'2px 8px' }}>
+                      {ROLE_LABELS[inv.role_context]}
+                    </span>
+                  </td>
+
+                  {/* Squad */}
+                  <td style={{ padding:'12px 16px' }}>
+                    <span style={{ fontSize:12, color:T.text2 }}>{SQUAD_LABELS[inv.squad] ?? inv.squad}</span>
+                  </td>
+
+                  {/* Convidado por */}
+                  <td style={{ padding:'12px 16px' }}>
+                    <span style={{ fontSize:12, color:T.text2 }}>{inv.invited_by}</span>
+                  </td>
+
+                  {/* Expira em */}
+                  <td style={{ padding:'12px 16px' }}>
+                    {inv.status === 'accepted' ? (
+                      <span style={{ fontSize:12, color:T.text3 }}>—</span>
+                    ) : (
+                      <span style={{ fontSize:12, fontWeight:500, color:expiry.color }}>{expiry.text}</span>
+                    )}
+                  </td>
+
+                  {/* Status */}
+                  <td style={{ padding:'12px 16px' }}>
+                    <span style={{ fontSize:11, fontWeight:600, color:stMeta.color, background:stMeta.bg, border:`1px solid ${stMeta.color}33`, borderRadius:5, padding:'2px 8px' }}>
+                      {stMeta.label}
+                    </span>
+                  </td>
+
+                  {/* Ações */}
+                  <td style={{ padding:'12px 16px' }}>
+                    {!canManage ? (
+                      <span style={{ fontSize:11, color:T.text3 }}>—</span>
+                    ) : (
+                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        {(isPending || isExpired) && (
+                          <ActionBtn label="Reenviar" color={T.accent} onClick={() => handleResend(inv)}/>
+                        )}
+                        {isPending && (
+                          <ActionBtn label="Copiar link" color={T.neutral} onClick={() => handleCopyLink(inv)}/>
+                        )}
+                        {isPending && (
+                          <ActionBtn label="Cancelar" color={T.crit} onClick={() => handleCancel(inv)}/>
+                        )}
+                        {inv.status === 'accepted' && (
+                          <span style={{ fontSize:11, color:T.text3 }}>—</span>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <p style={{ fontSize:11, color:T.text3, marginTop:12 }}>
+        Convites pendentes expiram em 7 dias. Apenas convites do tenant atual são exibidos.
+      </p>
+    </div>
+  )
+}
+
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
-export default function TeamPage({ onInvite }: { onInvite?: () => void }) {
+export default function TeamPage({ onInvite, initialTab }: { onInvite?: () => void; initialTab?: Tab }) {
   const { activeUser } = useSession()
   const canManage = can(activeUser.permissions, 'users:manage')
-  const [tab, setTab] = useState<Tab>('membros')
+  const [tab, setTab] = useState<Tab>(initialTab ?? 'membros')
+  const pendingCount = countPendingInvites(activeUser.tenant_id)
 
-  if (!canManage && tab !== 'membros') {
-    // allow read-only view of membros but gate edits inside
-  }
+  useEffect(() => {
+    if (initialTab) setTab(initialTab)
+  }, [initialTab])
+
+  const tabContent = (manage: boolean) => (
+    <div style={{ paddingTop:20 }}>
+      {tab==='membros'    && <MembersTab onInvite={onInvite??(() =>{})} canManage={manage}/>}
+      {tab==='convites'   && <InvitesTab onInvite={onInvite??(() =>{})} canManage={manage} tenantId={activeUser.tenant_id} inviterName={activeUser.name}/>}
+      {tab==='permissoes' && (manage ? <PermissionsTab canManage={manage}/> : <PermissionDenied/>)}
+      {tab==='dashboards' && (manage ? <DashboardsTab canManage={manage}/> : <PermissionDenied/>)}
+    </div>
+  )
 
   return (
     <div style={{ padding:'28px 32px', maxWidth:1280, margin:'0 auto' }}>
@@ -928,29 +1154,12 @@ export default function TeamPage({ onInvite }: { onInvite?: () => void }) {
 
       <KpiStrip />
 
-      {canManage ? (
-        <div style={{ background:T.bgSurface, borderRadius:14, border:`1px solid ${T.border}`, padding:'0 24px 24px' }}>
-          <div style={{ padding:'16px 0 0' }}>
-            <TabBar active={tab} onChange={setTab}/>
-          </div>
-          <div style={{ paddingTop:20 }}>
-            {tab==='membros'    && <MembersTab onInvite={onInvite??(() =>{})} canManage={canManage}/>}
-            {tab==='permissoes' && <PermissionsTab canManage={canManage}/>}
-            {tab==='dashboards' && <DashboardsTab canManage={canManage}/>}
-          </div>
+      <div style={{ background:T.bgSurface, borderRadius:14, border:`1px solid ${T.border}`, padding:'0 24px 24px' }}>
+        <div style={{ padding:'16px 0 0' }}>
+          <TabBar active={tab} onChange={setTab} pendingCount={pendingCount}/>
         </div>
-      ) : (
-        <div style={{ background:T.bgSurface, borderRadius:14, border:`1px solid ${T.border}`, padding:'0 24px 24px' }}>
-          <div style={{ padding:'16px 0 0' }}>
-            <TabBar active={tab} onChange={setTab}/>
-          </div>
-          <div style={{ paddingTop:20 }}>
-            {tab==='membros'    && <MembersTab onInvite={onInvite??(() =>{})} canManage={false}/>}
-            {tab==='permissoes' && <PermissionDenied/>}
-            {tab==='dashboards' && <PermissionDenied/>}
-          </div>
-        </div>
-      )}
+        {tabContent(canManage)}
+      </div>
     </div>
   )
 }

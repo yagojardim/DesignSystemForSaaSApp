@@ -134,7 +134,7 @@ export function SCard({ title, action, children, style }: {
   return (
     <div style={{
       background: T.bgSurface, border: `1px solid ${T.border}`,
-      borderRadius: 10, padding: 16, ...style,
+      borderRadius: 10, padding: 16, minWidth: 0, overflow: 'hidden', ...style,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: T.text1 }}>{title}</span>
@@ -157,8 +157,9 @@ export function ProgressBar({ pct, color, height = 4 }: {
 }
 
 // ─── KpiCard — clicking navigates to filtered list ────────────────────────────
-export function KpiCard({ value, label, sub, color, alert, onClick }: {
-  value: string; label: string; sub?: string; color?: string; alert?: boolean; onClick?: () => void
+export function KpiCard({ value, label, sub, disclaimer, color, alert, onClick }: {
+  value: string; label: string; sub?: string; disclaimer?: string
+  color?: string; alert?: boolean; onClick?: () => void
 }) {
   const [hovered, setHovered] = useState(false)
   const clickable = !!onClick
@@ -177,13 +178,26 @@ export function KpiCard({ value, label, sub, color, alert, onClick }: {
         cursor: clickable ? 'pointer' : 'default',
         transition: 'all 0.15s',
         userSelect: 'none',
+        display: 'flex', flexDirection: 'column',
+        minWidth: 0,
       }}
     >
       <div style={{ fontSize: 22, fontWeight: 700, color: color ?? T.text1, lineHeight: 1 }}>{value}</div>
       <div style={{ fontSize: 11, color: T.text2, marginTop: 4 }}>{label}</div>
       {sub && <div style={{ fontSize: 10, color: T.text3, marginTop: 2 }}>{sub}</div>}
+      {disclaimer && (
+        <div
+          title={disclaimer}
+          style={{
+            fontSize: 10, color: T.text3, marginTop: 6,
+            overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+            borderTop: `1px solid ${T.border}`, paddingTop: 5,
+            fontStyle: 'italic', opacity: 0.75,
+          }}
+        >{disclaimer}</div>
+      )}
       {clickable && (
-        <div style={{ fontSize: 10, color: T.accent, marginTop: 6, opacity: hovered ? 1 : 0, transition: 'opacity 0.15s' }}>
+        <div style={{ fontSize: 10, color: T.accent, marginTop: disclaimer ? 4 : 6, opacity: hovered ? 1 : 0, transition: 'opacity 0.15s' }}>
           Ver lista →
         </div>
       )}
@@ -211,7 +225,7 @@ export function RagCard({ name, squad, rag, pct, daysLabel, reason, onClick }: {
         borderLeft:   `3px solid ${color}`,
         borderRadius: 10, padding: '12px 14px',
         cursor: onClick ? 'pointer' : 'default',
-        transition: 'all 0.15s',
+        transition: 'all 0.15s', minWidth: 0,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>

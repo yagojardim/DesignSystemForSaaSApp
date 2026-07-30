@@ -127,6 +127,9 @@
   --text-muted:    #466080;
 }
 
+/* ═══ Responsive grid utility ════════════════════════════════════ */
+.responsive-grid > * { min-width: 0; }
+
 /* ═══ Reset & base ═══════════════════════════════════════════════ */
 *, *::before, *::after { box-sizing: border-box; }
 

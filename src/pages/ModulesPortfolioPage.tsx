@@ -516,14 +516,14 @@ export default function ModulesPortfolioPage({ onNav }: Props) {
       </div>
 
       {/* KPI strip */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 24 }}>
         {[
           { label: 'Implementados', value: tenantMods.filter(m => m.status === 'implemented').length, color: D.blue },
           { label: 'Em preview',    value: tenantMods.filter(m => m.status === 'preview').length,      color: D.violet },
           { label: 'Pendentes',     value: tenantMods.filter(m => m.status === 'pending').length,       color: D.amber },
           { label: 'Disponíveis',   value: tenantMods.filter(m => m.status === 'not-contracted').length,color: D.text3 },
         ].map(k => (
-          <div key={k.label} style={{ background: D.card, border: `1px solid ${D.border}`, borderRadius: 10, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div key={k.label} style={{ background: D.card, border: `1px solid ${D.border}`, borderRadius: 10, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
             <span style={{ fontSize: 24, fontWeight: 800, color: k.color }}>{k.value}</span>
             <span style={{ fontSize: 11, color: D.text3, lineHeight: 1.3 }}>{k.label}</span>
           </div>

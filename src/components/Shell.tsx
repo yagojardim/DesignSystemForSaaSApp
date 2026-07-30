@@ -43,7 +43,7 @@ export function Shell({ children, currentView, onViewChange, onCreateIssue }: Sh
           onViewChange={v => { onViewChange(v as View); setActiveNav(v) }}
           onCreateIssue={onCreateIssue}
         />
-        <main className="flex-1 overflow-hidden">{children}</main>
+        <main className="flex-1 min-w-0 overflow-hidden">{children}</main>
       </div>
     </div>
   )

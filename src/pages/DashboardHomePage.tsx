@@ -25,6 +25,7 @@ import { getAssignedCards, ASSIGNMENT_TARGETS, type AssignmentTarget } from '../
 import { REPORT_REGISTRY, ReportChartModal, useChartModal } from '../data/reportRegistry'
 import { getBoardsForScope } from '../data/boards'
 import { countOperationalModules } from '../data/tenantModules'
+import { countPendingInvites, nearestExpiry } from '../data/invites'
 
 // ─── Shared hook: drawer + nav + filter state ─────────────────────────────────
 function useDrawer() {
@@ -57,7 +58,7 @@ const SPRINTS = ['Sprint 14', 'Sprint 15']
 
 // ─── Panel grid wrapper ───────────────────────────────────────────────────────
 function Grid({ cols = '1fr 1fr', children }: { cols?: string; children: ReactNode }) {
-  return <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 12 }}>{children}</div>
+  return <div className="responsive-grid" style={{ display: 'grid', gridTemplateColumns: cols, gap: 12 }}>{children}</div>
 }
 function ColSpan({ children }: { children: ReactNode }) {
   return <div style={{ gridColumn: '1 / -1' }}>{children}</div>
@@ -71,6 +72,14 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
   const _boards = getBoardsForScope(_scope.projects_allowed, activeUser.tenant_id)
   const _activeBoards = _boards.filter(b => b.status === 'active').length
   const _modCounts = countOperationalModules(activeUser.tenant_id)
+  const _pendingInvites = countPendingInvites(activeUser.tenant_id)
+  const _nearestInvite  = nearestExpiry(activeUser.tenant_id)
+  const _inviteSub = _nearestInvite
+    ? (() => {
+        const days = Math.floor((new Date(_nearestInvite.expires_at).getTime() - Date.now()) / 86400000)
+        return days <= 0 ? 'expira hoje' : `expira em ${days}d`
+      })()
+    : 'nenhum pendente'
 
   const modules = [
     { name: 'Board & Sprint',   active: true,  users: 9 },
@@ -97,14 +106,13 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
 
   return (
     <>
-      <Grid cols="repeat(6,1fr)">
-        <KpiCard value="11" label="Usuários" sub="9 ativos" onClick={() => onNav('team')} />
-        <KpiCard value="3"  label="Projetos" sub="2 ativos" onClick={() => onNav('projects-list')} />
-        <KpiCard value={String(_boards.length)} label="Boards" sub={`${_activeBoards} ativo${_activeBoards !== 1 ? 's' : ''}`} onClick={() => onNav('boards-list')} />
-        <KpiCard value={String(_modCounts.active)} label="Módulos ativos" sub={`de ${_modCounts.total}`} onClick={() => onNav('modules')} />
-        <KpiCard value="1"  label="Bloqueados" sub="João Prado" color={T.crit} alert onClick={() => onNav('team')} />
-        <KpiCard value="2"  label="Convites" sub="expiram em 7d" color={T.warn} onClick={() => onNav('team')} />
-      </Grid>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
+        <KpiCard value="3"  label="Projetos" sub="2 ativos" disclaimer="projetos ativos neste tenant" onClick={() => onNav('projects-list')} />
+        <KpiCard value={String(_boards.length)} label="Boards" sub={`${_activeBoards} ativo${_activeBoards !== 1 ? 's' : ''}`} disclaimer="boards de Kanban disponíveis" onClick={() => onNav('boards-list')} />
+        <KpiCard value={String(_modCounts.active)} label="Módulos ativos" sub={`de ${_modCounts.total}`} disclaimer="módulos habilitados para este tenant" onClick={() => onNav('modules')} />
+        <KpiCard value="11" label="Usuários" sub="9 ativos" disclaimer="membros registrados no tenant" onClick={() => onNav('team:membros')} />
+        <KpiCard value={String(_pendingInvites)} label="Convites" sub={_inviteSub} disclaimer="convites pendentes de aceitação" color={_pendingInvites > 0 ? T.warn : undefined} onClick={() => onNav('team:convites')} />
+      </div>
 
       <div style={{ marginTop: 12 }}>
         <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
@@ -182,11 +190,11 @@ function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
     <>
       {chartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
-      <Grid cols="repeat(4,1fr)">
-        <KpiCard value="4"   label="Projetos Ativos"      sub="2 no prazo"   onClick={() => onNav('projects-list')} />
-        <KpiCard value="2"   label="Em Risco / Atrasados" sub="1 crítico"    color={T.warn} alert onClick={() => onNav('reports')} />
-        <KpiCard value="71%" label="Previsibilidade"      sub="meta: 80%"    onClick={() => openChart('velocity')} />
-        <KpiCard value="67%" label="Planejado × Concluído" sub="Q2 2025"    onClick={() => openChart('criados')} />
+      <Grid cols="repeat(auto-fill, minmax(200px, 1fr))">
+        <KpiCard value="4"   label="Projetos Ativos"      sub="2 no prazo"   disclaimer="projetos com sprint ativa ou em andamento" onClick={() => onNav('projects-list')} />
+        <KpiCard value="2"   label="Em Risco / Atrasados" sub="1 crítico"    disclaimer="projetos com RAG amarelo ou vermelho" color={T.warn} alert onClick={() => onNav('reports')} />
+        <KpiCard value="71%" label="Previsibilidade"      sub="meta: 80%"    disclaimer="% do planejado efetivamente entregue" onClick={() => openChart('velocity')} />
+        <KpiCard value="67%" label="Planejado × Concluído" sub="Q2 2025"    disclaimer="comparativo de entrega vs. compromisso da sprint" onClick={() => openChart('criados')} />
       </Grid>
 
       <div style={{ marginTop: 12 }}>
@@ -237,11 +245,11 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
     <>
       {chartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
-      <Grid cols="repeat(4,1fr)">
-        <KpiCard value="72%" label="Progresso do Projeto" sub="Sprint 14 ativo" onClick={() => openChart('burndown')} />
-        <KpiCard value="18d" label="Prazo Restante"       sub="Entrega: 28 ago" onClick={() => onNav('gantt')} />
-        <KpiCard value={String(blocked.length)} label="Bloqueios Ativos" sub="ver lista" color={T.crit} alert onClick={() => onNav('list')} />
-        <KpiCard value="+12%" label="Risco de Escopo"     sub="vs planejamento" color={T.warn} alert onClick={() => openChart('criados')} />
+      <Grid cols="repeat(auto-fill, minmax(200px, 1fr))">
+        <KpiCard value="72%" label="Progresso do Projeto" sub="Sprint 14 ativo" disclaimer="% de tarefas concluídas na sprint ativa" onClick={() => openChart('burndown')} />
+        <KpiCard value="18d" label="Prazo Restante"       sub="Entrega: 28 ago" disclaimer="dias até a data de entrega planejada" onClick={() => onNav('gantt')} />
+        <KpiCard value={String(blocked.length)} label="Bloqueios Ativos" sub="ver lista" disclaimer="demandas atualmente bloqueadas" color={T.crit} alert onClick={() => onNav('list')} />
+        <KpiCard value="+12%" label="Risco de Escopo"     sub="vs planejamento" disclaimer="variação de escopo vs. o planejado" color={T.warn} alert onClick={() => openChart('criados')} />
       </Grid>
 
       <div style={{ marginTop: 12 }}>
@@ -261,7 +269,7 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
 
         <ColSpan>
           <SCard title="Carga do Time">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
               {team.map(m => (
                 <div key={m.name} style={{ background: T.bgPage, borderRadius: 7, padding: '10px 12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
@@ -310,11 +318,11 @@ function ProductManagerPanel({ onNav }: { onNav: (v: string) => void }) {
 
   return (
     <>
-      <Grid cols="repeat(4,1fr)">
-        <KpiCard value="930"  label="MAU"              sub="+8% vs mês ant." color={T.success} onClick={() => onNav('reports')} />
-        <KpiCard value="7.5%" label="Stickiness"       sub="DAU/MAU — meta 10-20%" color={T.warn} onClick={() => onNav('reports')} />
-        <KpiCard value="3.2%" label="Churn Rate"       sub="meta: &lt;2%" color={T.crit} alert onClick={() => onNav('reports')} />
-        <KpiCard value="52%"  label="Adoção de Features" sub="base elegível" onClick={() => onNav('reports')} />
+      <Grid cols="repeat(auto-fill, minmax(200px, 1fr))">
+        <KpiCard value="930"  label="MAU"              sub="+8% vs mês ant." disclaimer="usuários únicos ativos nos últimos 30 dias" color={T.success} onClick={() => onNav('reports')} />
+        <KpiCard value="7.5%" label="Stickiness"       sub="DAU/MAU — meta 10-20%" disclaimer="frequência de uso: ativos diários ÷ mensais" color={T.warn} onClick={() => onNav('reports')} />
+        <KpiCard value="3.2%" label="Churn Rate"       sub="meta: &lt;2%" disclaimer="taxa de abandono por tenant — sem impacto billing" color={T.crit} alert onClick={() => onNav('reports')} />
+        <KpiCard value="52%"  label="Adoção de Features" sub="base elegível" disclaimer="% médio de adoção sobre base elegível por feature" onClick={() => onNav('reports')} />
       </Grid>
 
       <div style={{ marginTop: 12 }}>
@@ -352,7 +360,7 @@ function ProductManagerPanel({ onNav }: { onNav: (v: string) => void }) {
 
         <ColSpan>
           <SCard title="Roadmap Estratégico">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
               {roadmap.map(r => (
                 <div key={r.epic} style={{ background: T.bgPage, borderRadius: 8, padding: '12px 14px', cursor: 'pointer' }} onClick={() => onNav('epics')}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: T.text1 }}>{r.epic}</div>
@@ -600,14 +608,15 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
     <>
       {chartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
-      <Grid cols="repeat(4,1fr)">
-        <KpiCard value={`${coverageReady}%`} label="Cobertura Ready" sub="pts prontos ÷ velocity" onClick={() => onNav('list')} />
-        <KpiCard value={`${backlogHealth}%`} label="Saúde do Backlog" sub="itens saudáveis ÷ avaliáveis" color={backlogHealth < 60 ? T.warn : T.success} alert={backlogHealth < 60} onClick={() => onNav('list')} />
-        <KpiCard value={`${funcProgress || 68}%`} label="Progresso Funcional" sub="considera aceite do PO" onClick={() => openChart('burndown')} />
+      <Grid cols="repeat(auto-fill, minmax(200px, 1fr))">
+        <KpiCard value={`${coverageReady}%`} label="Cobertura Ready" sub="pts prontos ÷ velocity" disclaimer="pontos prontos ÷ velocidade média da sprint" onClick={() => onNav('list')} />
+        <KpiCard value={`${backlogHealth}%`} label="Saúde do Backlog" sub="itens saudáveis ÷ avaliáveis" disclaimer="itens saudáveis ÷ total de itens avaliáveis" color={backlogHealth < 60 ? T.warn : T.success} alert={backlogHealth < 60} onClick={() => onNav('list')} />
+        <KpiCard value={`${funcProgress || 68}%`} label="Progresso Funcional" sub="considera aceite do PO" disclaimer="considera critério de aceite, não só status Done" onClick={() => openChart('burndown')} />
         <KpiCard
           value={unreadCount > 0 ? String(unreadCount) : '0'}
           label="Msgs do Cliente"
           sub={unreadCount > 0 ? 'não lidas — ação necessária' : 'sem pendências'}
+          disclaimer="mensagens de clientes recebidas não lidas"
           color={unreadCount > 0 ? T.accent : T.text3}
           alert={unreadCount > 0}
           onClick={() => onNav('client-messages')}
@@ -675,11 +684,11 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
     <>
       {smChartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
-      <Grid cols="repeat(4,1fr)">
-        <KpiCard value={`${sprintHealth || 62}%`} label="Saúde da Sprint" sub={`${parados.length} parados`} color={T.warn} alert onClick={() => openSMChart('burndown')} />
-        <KpiCard value={String(blocked.length)} label="Impedimentos" sub="ativos" color={T.crit} alert onClick={() => onNav('list')} />
-        <KpiCard value="⚠" label="Sprint Goal" sub="2 itens críticos parados" color={T.warn} onClick={() => onNav('project')} />
-        <KpiCard value="6" label="WIP Atual" sub="limite: 5 — excedido" color={T.crit} alert onClick={() => onNav('project')} />
+      <Grid cols="repeat(auto-fill, minmax(200px, 1fr))">
+        <KpiCard value={`${sprintHealth || 62}%`} label="Saúde da Sprint" sub={`${parados.length} parados`} disclaimer="% de conclusão em relação à meta da sprint" color={T.warn} alert onClick={() => openSMChart('burndown')} />
+        <KpiCard value={String(blocked.length)} label="Impedimentos" sub="ativos" disclaimer="impedimentos formais sem resolução registrada" color={T.crit} alert onClick={() => onNav('list')} />
+        <KpiCard value="⚠" label="Sprint Goal" sub="2 itens críticos parados" disclaimer="itens que ameaçam atingir o objetivo da sprint" color={T.warn} onClick={() => onNav('project')} />
+        <KpiCard value="6" label="WIP Atual" sub="limite: 5 — excedido" disclaimer="itens em andamento vs. limite acordado pelo time" color={T.crit} alert onClick={() => onNav('project')} />
       </Grid>
 
       <div style={{ marginTop: 12 }}>
@@ -719,7 +728,7 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
 
         <ColSpan>
           <SCard title="Cerimônias & Ações de Facilitação">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
               {cerimonias.map(c => (
                 <div key={c.name} style={{ background: T.bgPage, borderRadius: 8, padding: '12px 14px', cursor: 'pointer' }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: T.text1 }}>{c.name}</div>
@@ -769,11 +778,11 @@ function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
     <>
       {tlChartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
-      <Grid cols="repeat(4,1fr)">
-        <KpiCard value="74%" label="Saúde Técnica" sub="cobertura de testes" color={T.warn} onClick={() => openTLChart('health')} />
-        <KpiCard value={String(critBugs)} label="Bugs Críticos" sub="em prod" color={T.crit} alert onClick={() => openTLChart('bugs')} />
-        <KpiCard value="4"   label="Deploys/semana" sub="+2 vs semana ant." color={T.success} onClick={() => onNav('reports')} />
-        <KpiCard value="0.8%" label="Error Rate" sub="meta: &lt;0.5%" color={T.warn} alert onClick={() => onNav('reports')} />
+      <Grid cols="repeat(auto-fill, minmax(200px, 1fr))">
+        <KpiCard value="74%" label="Saúde Técnica" sub="cobertura de testes" disclaimer="score composto de cobertura, débito e estabilidade" color={T.warn} onClick={() => openTLChart('health')} />
+        <KpiCard value={String(critBugs)} label="Bugs Críticos" sub="em prod" disclaimer="bugs P0/P1 bloqueando entrega ou em produção" color={T.crit} alert onClick={() => openTLChart('bugs')} />
+        <KpiCard value="4"   label="Deploys/semana" sub="+2 vs semana ant." disclaimer="frequência de deploy — métrica DORA" color={T.success} onClick={() => onNav('reports')} />
+        <KpiCard value="0.8%" label="Error Rate" sub="meta: &lt;0.5%" disclaimer="taxa de erro em produção nas últimas 24h" color={T.warn} alert onClick={() => onNav('reports')} />
       </Grid>
 
       <div style={{ marginTop: 12 }}>
@@ -797,7 +806,7 @@ function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
 
         <ColSpan>
           <SCard title="Dívida Técnica / Saúde do Código">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
               {divida.map(d => (
                 <div key={d.area}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -841,11 +850,11 @@ function DevPanel({ onNav }: { onNav: (v: string) => void }) {
   return (
     <>
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
-      <Grid cols="repeat(4,1fr)">
-        <KpiCard value={String(myItems.length)} label="Meus Itens Ativos" sub="1 bloqueado" onClick={() => onNav('list')} />
-        <KpiCard value="1" label="Atrasados" sub="BUG-38 vence hoje" color={T.crit} alert onClick={() => onNav('list')} />
-        <KpiCard value={String(blocked.length)} label="Meus Bloqueados" sub="" color={T.warn} alert onClick={() => onNav('list')} />
-        <KpiCard value="2" label="PRs Abertos" sub="1 precisa de ação" color={T.accent} onClick={() => onNav('project')} />
+      <Grid cols="repeat(auto-fill, minmax(200px, 1fr))">
+        <KpiCard value={String(myItems.length)} label="Meus Itens Ativos" sub="1 bloqueado" disclaimer="tarefas atribuídas a mim nesta sprint" onClick={() => onNav('list')} />
+        <KpiCard value="1" label="Atrasados" sub="BUG-38 vence hoje" disclaimer="itens com prazo hoje ou já vencido" color={T.crit} alert onClick={() => onNav('list')} />
+        <KpiCard value={String(blocked.length)} label="Meus Bloqueados" sub="" disclaimer="minhas tarefas aguardando desbloqueio externo" color={T.warn} alert onClick={() => onNav('list')} />
+        <KpiCard value="2" label="PRs Abertos" sub="1 precisa de ação" disclaimer="pull requests abertos nos quais estou envolvido" color={T.accent} onClick={() => onNav('project')} />
       </Grid>
 
       <div style={{ marginTop: 12 }}>
@@ -894,11 +903,11 @@ function UxPanel({ onNav }: { onNav: (v: string) => void }) {
   return (
     <>
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
-      <Grid cols="repeat(4,1fr)">
-        <KpiCard value="8"  label="Fluxos em Design"   sub="3 projetos" onClick={() => onNav('list')} />
-        <KpiCard value="3"  label="Protótipos p/ Val."  sub="aguardando PO/usuário" color={T.accent} onClick={() => onNav('list')} />
-        <KpiCard value="4"  label="Pendências Críticas" sub="1 acessibilidade" color={T.crit} alert onClick={() => onNav('list')} />
-        <KpiCard value="1"  label="Handoff Pronto" sub="Dashboard por Papel" color={T.success} onClick={() => onNav('list')} />
+      <Grid cols="repeat(auto-fill, minmax(200px, 1fr))">
+        <KpiCard value="8"  label="Fluxos em Design"   sub="3 projetos" disclaimer="fluxos com trabalho de design em progresso" onClick={() => onNav('list')} />
+        <KpiCard value="3"  label="Protótipos p/ Val."  sub="aguardando PO/usuário" disclaimer="protótipos aguardando feedback de usuário ou PO" color={T.accent} onClick={() => onNav('list')} />
+        <KpiCard value="4"  label="Pendências Críticas" sub="1 acessibilidade" disclaimer="fluxos sem spec, protótipo ou validação completa" color={T.crit} alert onClick={() => onNav('list')} />
+        <KpiCard value="1"  label="Handoff Pronto" sub="Dashboard por Papel" disclaimer="entregas de design prontas para implementação" color={T.success} onClick={() => onNav('list')} />
       </Grid>
 
       <div style={{ marginTop: 12 }}>
@@ -960,11 +969,11 @@ function QaPanel({ onNav }: { onNav: (v: string) => void }) {
     <>
       {qaChartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
-      <Grid cols="repeat(4,1fr)">
-        <KpiCard value={String(testing.length)} label="Aguardando Teste" sub="Ready for QA" onClick={() => onNav('list')} />
-        <KpiCard value={String(critAndHighBugs)} label="Bugs Críticos" sub={critAndHighBugs > 0 ? 'requer atenção' : 'tudo ok'} color={T.crit} alert={critAndHighBugs > 0} onClick={() => openQAChart('bugs')} />
-        <KpiCard value="28%" label="Taxa de Rejeição" sub="meta: &lt;15%" color={T.warn} alert onClick={() => openQAChart('bugs')} />
-        <KpiCard value="6"   label="Evidências Pendentes" sub="dev não submeteu" color={T.warn} onClick={() => onNav('list')} />
+      <Grid cols="repeat(auto-fill, minmax(200px, 1fr))">
+        <KpiCard value={String(testing.length)} label="Aguardando Teste" sub="Ready for QA" disclaimer="itens em fila de QA ou em homologação ativa" onClick={() => onNav('list')} />
+        <KpiCard value={String(critAndHighBugs)} label="Bugs Críticos" sub={critAndHighBugs > 0 ? 'requer atenção' : 'tudo ok'} disclaimer="bugs P0/P1 bloqueando entrega da sprint" color={T.crit} alert={critAndHighBugs > 0} onClick={() => openQAChart('bugs')} />
+        <KpiCard value="28%" label="Taxa de Rejeição" sub="meta: &lt;15%" disclaimer="% de itens devolvidos ao Dev pelo QA" color={T.warn} alert onClick={() => openQAChart('bugs')} />
+        <KpiCard value="6"   label="Evidências Pendentes" sub="dev não submeteu" disclaimer="bugs sem evidência de reprodução registrada" color={T.warn} onClick={() => onNav('list')} />
       </Grid>
 
       <div style={{ marginTop: 12 }}>

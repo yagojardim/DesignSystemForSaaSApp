@@ -143,6 +143,7 @@ function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void })
   const [createOpen, setCreate] = useState(false)
   const [inviteOpen, setInvite] = useState(false)
   const [selectedBoardId, setSelectedBoardId] = useState<string | undefined>()
+  const [teamInitialTab, setTeamInitialTab] = useState<'membros'|'convites'|'permissoes'|'dashboards'>('membros')
 
   return (
     <>
@@ -152,9 +153,13 @@ function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void })
       {inviteOpen && (
         <InviteMemberModal onClose={()=>setInvite(false)} />
       )}
-      <Shell currentView={view} onViewChange={setView} onCreateIssue={()=>setCreate(true)}>
-        {view==='home'          && <div className="h-full overflow-y-auto dark-shell"><DashboardHomePage onNav={v => { if (ALL_VIEWS.includes(v as View)) setView(v as View) }} onInvite={() => setInvite(true)} /></div>}
-        {view==='projects-list' && <div className="h-full overflow-y-auto dark-shell"><ProjectsListPage/></div>}
+      <Shell currentView={view} onViewChange={v => { if (v === 'team') setTeamInitialTab('membros'); setView(v) }} onCreateIssue={()=>setCreate(true)}>
+        {view==='home'          && <div className="h-full overflow-y-auto dark-shell"><DashboardHomePage onNav={v => {
+          if (v === 'team:convites') { setTeamInitialTab('convites'); setView('team') }
+          else if (v === 'team:membros') { setTeamInitialTab('membros'); setView('team') }
+          else if (ALL_VIEWS.includes(v as View)) setView(v as View)
+        }} onInvite={() => setInvite(true)} /></div>}
+        {view==='projects-list' && <div className="h-full overflow-y-auto dark-shell"><ProjectsListPage onNav={v => { if (ALL_VIEWS.includes(v as View)) setView(v as View) }} /></div>}
         {view==='gantt'         && <div className="h-full overflow-hidden"><GanttPage/></div>}
         {view==='calendar'      && <div className="h-full overflow-hidden"><CalendarPage/></div>}
         {view==='list'          && <div className="h-full overflow-hidden dark-shell"><ListPage/></div>}
@@ -166,9 +171,9 @@ function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void })
         {view==='reports'       && <div className="h-full overflow-y-auto dark-shell"><ReportsPage/></div>}
         {view==='automations'   && <div className="h-full overflow-hidden dark-shell"><AutomationsPage/></div>}
         {view==='config'        && <div className="h-full overflow-hidden dark-shell"><ConfigPage/></div>}
-        {view==='team'          && <div className="h-full overflow-y-auto dark-shell"><TeamPage onInvite={() => setInvite(true)} /></div>}
+        {view==='team'          && <div className="h-full overflow-y-auto dark-shell"><TeamPage onInvite={() => setInvite(true)} initialTab={teamInitialTab} /></div>}
         {view==='my-tasks'      && <div className="h-full overflow-y-auto dark-shell"><MyTasksPage onNav={v => { if (ALL_VIEWS.includes(v as View)) setView(v as View) }} /></div>}
-        {view==='dashboard'     && <div className="h-full overflow-y-auto dark-shell" style={{ background:'var(--bg-page,#0d1321)' }}><DashboardPage/></div>}
+        {view==='dashboard'     && <div className="h-full overflow-y-auto dark-shell" style={{ background:'var(--bg-page,#0d1321)' }}><DashboardPage onNav={v => { if (ALL_VIEWS.includes(v as View)) setView(v as View) }} /></div>}
         {view==='project'       && <div className="h-full overflow-hidden dark-shell"><ProjectPage boardId={selectedBoardId} onBackToBoards={selectedBoardId ? () => setView('boards-list') : undefined} /></div>}
         {view==='issue'         && <div className="h-full overflow-hidden dark-shell"><IssueDetailPage/></div>}
         {view==='task-drawer'   && <div className="h-full overflow-hidden dark-shell"><TaskDrawerPage/></div>}

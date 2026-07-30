@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { CreateIssueModal } from '../components/CreateIssueModal'
 import { WorkItemDetail, type WorkItemData } from '../components/WorkItemDetail'
 import { T } from '../components/ds/tokens'
@@ -68,6 +68,126 @@ function widToIssue(issue: Issue, updated: WorkItemData): Issue {
     epic:     updated.epicKey ?? issue.epic,
     sprint:   updated.sprintId ?? issue.sprint,
   }
+}
+
+// ─── Issue search dropdown (for linking unlinked issues into an epic) ─────────
+function IssueSearchDropdown({
+  epicId, epicColor, issues, onLink,
+}: { epicId: string; epicColor: string; issues: Issue[]; onLink: (key: string) => void }) {
+  const [query,  setQuery]  = useState('')
+  const [open,   setOpen]   = useState(false)
+  const [cursor, setCursor] = useState(-1)
+  const ref      = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const linkedKeys = new Set(issues.filter(i => i.epic === epicId).map(i => i.key))
+
+  const results = query.trim().length < 1 ? [] : issues.filter(i => {
+    if (linkedKeys.has(i.key)) return false
+    const q = query.toLowerCase()
+    const epicLabel = EPICS.find(e => e.id === i.epic)?.label ?? ''
+    return (
+      i.key.toLowerCase().includes(q) ||
+      i.title.toLowerCase().includes(q) ||
+      epicLabel.toLowerCase().includes(q) ||
+      i.labels.some(l => l.toLowerCase().includes(q))
+    )
+  }).slice(0, 8)
+
+  useEffect(() => {
+    if (!open) return
+    function h(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false); setQuery(''); setCursor(-1)
+      }
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setCursor(c => Math.min(c + 1, results.length - 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setCursor(c => Math.max(c - 1, 0)) }
+    else if (e.key === 'Enter' && cursor >= 0 && results[cursor]) {
+      e.preventDefault()
+      onLink(results[cursor].key); setQuery(''); setOpen(false); setCursor(-1)
+    } else if (e.key === 'Escape') { setOpen(false); setQuery(''); setCursor(-1) }
+  }
+
+  const showDropdown = open && query.trim().length > 0
+
+  return (
+    <div ref={ref} style={{ position: 'relative', marginTop: 12 }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        background: T.bgSurface2, border: `1px solid ${epicColor}50`,
+        borderRadius: 8, padding: '7px 12px',
+        boxShadow: open ? `0 0 0 2px ${epicColor}20` : 'none',
+        transition: 'box-shadow 0.15s',
+      }}>
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0 }}>
+          <circle cx="5.5" cy="5.5" r="4" stroke={T.text3} strokeWidth="1.2"/>
+          <path d="M8.5 8.5l2 2" stroke={T.text3} strokeWidth="1.2" strokeLinecap="round"/>
+        </svg>
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={e => { setQuery(e.target.value); setOpen(true); setCursor(-1) }}
+          onFocus={() => { if (query.trim()) setOpen(true) }}
+          onKeyDown={handleKeyDown}
+          placeholder="Buscar e adicionar issues por título, key, épico ou funcionalidade…"
+          style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 12, color: T.text2 }}
+        />
+        {query && (
+          <button
+            onMouseDown={e => { e.preventDefault(); setQuery(''); setOpen(false); setCursor(-1); inputRef.current?.focus() }}
+            style={{ background: 'none', border: 'none', color: T.text3, cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0, flexShrink: 0 }}>×</button>
+        )}
+      </div>
+
+      {showDropdown && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 300,
+          background: T.bgSurface2, border: `1px solid ${T.border2}`,
+          borderRadius: 8, boxShadow: T.shadowModal, overflow: 'hidden',
+        }}>
+          {results.length === 0 ? (
+            <div style={{ padding: '10px 12px', fontSize: 12, color: T.text3, textAlign: 'center' }}>
+              Nenhuma issue fora do épico corresponde a "{query}"
+            </div>
+          ) : (
+            results.map((issue, idx) => {
+              const sc = STATUS_CFG[issue.status]
+              const ti = TYPE_ICON[issue.type]
+              const isCursor = idx === cursor
+              return (
+                <div
+                  key={issue.key}
+                  onMouseDown={e => { e.preventDefault(); onLink(issue.key); setQuery(''); setOpen(false); setCursor(-1) }}
+                  onMouseEnter={() => setCursor(idx)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                    cursor: 'pointer',
+                    background: isCursor ? `${epicColor}18` : 'transparent',
+                    borderTop: idx > 0 ? `1px solid ${T.border}` : 'none',
+                    transition: 'background 0.1s',
+                  }}
+                >
+                  <span style={{ color: ti.color, fontSize: 13, flexShrink: 0 }}>{ti.icon}</span>
+                  <span style={{ fontSize: 11, color: T.text3, fontFamily: 'monospace', width: 62, flexShrink: 0 }}>{issue.key}</span>
+                  <span style={{ fontSize: 12, color: T.text1, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.title}</span>
+                  <span style={{ fontSize: 10, color: sc.color, background: sc.bg, borderRadius: 20, padding: '1px 7px', flexShrink: 0 }}>{sc.label}</span>
+                  <span style={{ fontSize: 10, color: epicColor, background: `${epicColor}14`, borderRadius: 4, padding: '1px 6px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    + Vincular
+                  </span>
+                </div>
+              )
+            })
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -311,6 +431,14 @@ export default function EpicsPage() {
                         })}
                       </div>
                     )}
+                    {/* Search to link existing issues */}
+                    <IssueSearchDropdown
+                      epicId={epic.id}
+                      epicColor={color}
+                      issues={issues}
+                      onLink={key => setIssues(prev => prev.map(i => i.key === key ? { ...i, epic: epic.id } : i))}
+                    />
+
                     {/* Add issue CTA */}
                     <button
                       onClick={e => { e.stopPropagation(); setEpicCreate(true) }}
