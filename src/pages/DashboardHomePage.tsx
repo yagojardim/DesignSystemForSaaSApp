@@ -3,7 +3,7 @@ import { useSession } from '../data/SessionContext'
 import { T } from '../components/ds/tokens'
 import {
   KpiCard, RagCard, ProgressCard, WorkQueue, SprintDonutCard,
-  WorkItemDetailDrawer, FilterBar,
+  WorkItemDetailDrawer, FilterBar, ProjectMultiSelect,
   SCard, ProgressBar, StatusBadge, ConditionalTag, Av,
   AuditFeed, ActivityTimeline, EmptyState, LoadingState,
   type WorkItem, type FilterState, type RagStatus,
@@ -45,10 +45,26 @@ function applyFilters(items: WorkItem[], f: FilterState): WorkItem[] {
   )
 }
 
+function ProjFilterRow({ selected, onChange }: { selected: Set<string>; onChange: (s: Set<string>) => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 10 }}>
+      <ProjectMultiSelect projects={PROJECTS} selected={selected} onChange={onChange} />
+    </div>
+  )
+}
+
 const PROJECTS = [
-  { id: 'proj_001', name: 'Website Relaunch' },
-  { id: 'proj_002', name: 'Infra Migration' },
+  { id: 'proj_001', name: 'Website Relaunch', color: '#35c9ae' },
+  { id: 'proj_002', name: 'Infra Migration',  color: '#a78bfa' },
+  { id: 'proj_003', name: 'ERP Corporativo',  color: '#f5a524' },
+  { id: 'proj_004', name: 'Mobile App v2',    color: '#60a5fa' },
 ]
+const ALL_PROJ_IDS = new Set(PROJECTS.map(p => p.id))
+
+function byProjects<T extends { project_id?: string }>(items: T[], sel: Set<string>): T[] {
+  if (sel.size >= PROJECTS.length) return items
+  return items.filter(w => sel.has(w.project_id ?? ''))
+}
 const SQUADS = [
   { id: 'squad_growth',   name: 'Growth' },
   { id: 'squad_platform', name: 'Platform' },
@@ -67,6 +83,7 @@ function ColSpan({ children }: { children: ReactNode }) {
 // ─── 1. ADMIN MASTER ─────────────────────────────────────────────────────────
 function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?: () => void }) {
   const [filters, setFilters] = useFilters()
+  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
   const { activeUser } = useSession()
   const _scope = getActiveScope()
   const _boards = getBoardsForScope(_scope.projects_allowed, activeUser.tenant_id)
@@ -106,7 +123,8 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
 
   return (
     <>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
+      <ProjFilterRow selected={selProj} onChange={setSelProj} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
         <KpiCard value="3"  label="Projetos" sub="2 ativos" disclaimer="projetos ativos neste tenant" onClick={() => onNav('projects-list')} />
         <KpiCard value={String(_boards.length)} label="Boards" sub={`${_activeBoards} ativo${_activeBoards !== 1 ? 's' : ''}`} disclaimer="boards de Kanban disponíveis" onClick={() => onNav('boards-list')} />
         <KpiCard value={String(_modCounts.active)} label="Módulos ativos" sub={`de ${_modCounts.total}`} disclaimer="módulos habilitados para este tenant" onClick={() => onNav('modules')} />
@@ -176,7 +194,8 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
 function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer: openPmoDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const blocked = applyFilters(getBlockedItems(), filters)
+  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
+  const blocked = applyFilters(byProjects(getBlockedItems(), selProj), filters)
   const { openChart, chartModal } = useChartModal()
 
   const rags: { name: string; squad: string; rag: RagStatus; pct: number; days: string; reason?: string }[] = [
@@ -190,7 +209,8 @@ function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
     <>
       {chartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
-      <Grid cols="repeat(auto-fill, minmax(200px, 1fr))">
+      <ProjFilterRow selected={selProj} onChange={setSelProj} />
+      <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
         <KpiCard value="4"   label="Projetos Ativos"      sub="2 no prazo"   disclaimer="projetos com sprint ativa ou em andamento" onClick={() => onNav('projects-list')} />
         <KpiCard value="2"   label="Em Risco / Atrasados" sub="1 crítico"    disclaimer="projetos com RAG amarelo ou vermelho" color={T.warn} alert onClick={() => onNav('reports')} />
         <KpiCard value="71%" label="Previsibilidade"      sub="meta: 80%"    disclaimer="% do planejado efetivamente entregue" onClick={() => openChart('velocity')} />
@@ -230,8 +250,9 @@ function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
 function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const sprint14 = applyFilters(getSprintItems('Sprint 14', 'proj_001'), filters)
-  const blocked  = applyFilters(getBlockedItems('proj_001'), filters)
+  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
+  const sprint14 = applyFilters(byProjects(getSprintItems('Sprint 14', 'proj_001'), selProj), filters)
+  const blocked  = applyFilters(byProjects(getBlockedItems('proj_001'), selProj), filters)
   const { openChart, chartModal } = useChartModal()
 
   const team = [
@@ -245,7 +266,8 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
     <>
       {chartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
-      <Grid cols="repeat(auto-fill, minmax(200px, 1fr))">
+      <ProjFilterRow selected={selProj} onChange={setSelProj} />
+      <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
         <KpiCard value="72%" label="Progresso do Projeto" sub="Sprint 14 ativo" disclaimer="% de tarefas concluídas na sprint ativa" onClick={() => openChart('burndown')} />
         <KpiCard value="18d" label="Prazo Restante"       sub="Entrega: 28 ago" disclaimer="dias até a data de entrega planejada" onClick={() => onNav('gantt')} />
         <KpiCard value={String(blocked.length)} label="Bloqueios Ativos" sub="ver lista" disclaimer="demandas atualmente bloqueadas" color={T.crit} alert onClick={() => onNav('list')} />
@@ -269,7 +291,7 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
 
         <ColSpan>
           <SCard title="Carga do Time">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
               {team.map(m => (
                 <div key={m.name} style={{ background: T.bgPage, borderRadius: 7, padding: '10px 12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
@@ -296,6 +318,7 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
 // ─── 4. PRODUCT MANAGER ──────────────────────────────────────────────────────
 function ProductManagerPanel({ onNav }: { onNav: (v: string) => void }) {
   const [filters, setFilters] = useFilters()
+  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
 
   const funnel = [
     { stage: 'Visitantes',   value: 12400, pct: 100 },
@@ -318,7 +341,8 @@ function ProductManagerPanel({ onNav }: { onNav: (v: string) => void }) {
 
   return (
     <>
-      <Grid cols="repeat(auto-fill, minmax(200px, 1fr))">
+      <ProjFilterRow selected={selProj} onChange={setSelProj} />
+      <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
         <KpiCard value="930"  label="MAU"              sub="+8% vs mês ant." disclaimer="usuários únicos ativos nos últimos 30 dias" color={T.success} onClick={() => onNav('reports')} />
         <KpiCard value="7.5%" label="Stickiness"       sub="DAU/MAU — meta 10-20%" disclaimer="frequência de uso: ativos diários ÷ mensais" color={T.warn} onClick={() => onNav('reports')} />
         <KpiCard value="3.2%" label="Churn Rate"       sub="meta: &lt;2%" disclaimer="taxa de abandono por tenant — sem impacto billing" color={T.crit} alert onClick={() => onNav('reports')} />
@@ -360,7 +384,7 @@ function ProductManagerPanel({ onNav }: { onNav: (v: string) => void }) {
 
         <ColSpan>
           <SCard title="Roadmap Estratégico">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
               {roadmap.map(r => (
                 <div key={r.epic} style={{ background: T.bgPage, borderRadius: 8, padding: '12px 14px', cursor: 'pointer' }} onClick={() => onNav('epics')}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: T.text1 }}>{r.epic}</div>
@@ -581,8 +605,9 @@ function ClientFeedCard({ poId, tenantId }: { poId?: string; tenantId: string })
 function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const alertItems = applyFilters(getBacklogWithAlerts('proj_001'), filters)
-  const readyItems = applyFilters(getReadyItems('proj_001'), filters)
+  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
+  const alertItems = applyFilters(byProjects(getBacklogWithAlerts('proj_001'), selProj), filters)
+  const readyItems = applyFilters(byProjects(getReadyItems('proj_001'), selProj), filters)
   const { openChart, chartModal } = useChartModal()
 
   const unreadCount = getUnreadCountForTenant(MOCK_TENANT.tenant_id)
@@ -608,7 +633,8 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
     <>
       {chartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
-      <Grid cols="repeat(auto-fill, minmax(200px, 1fr))">
+      <ProjFilterRow selected={selProj} onChange={setSelProj} />
+      <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
         <KpiCard value={`${coverageReady}%`} label="Cobertura Ready" sub="pts prontos ÷ velocity" disclaimer="pontos prontos ÷ velocidade média da sprint" onClick={() => onNav('list')} />
         <KpiCard value={`${backlogHealth}%`} label="Saúde do Backlog" sub="itens saudáveis ÷ avaliáveis" disclaimer="itens saudáveis ÷ total de itens avaliáveis" color={backlogHealth < 60 ? T.warn : T.success} alert={backlogHealth < 60} onClick={() => onNav('list')} />
         <KpiCard value={`${funcProgress || 68}%`} label="Progresso Funcional" sub="considera aceite do PO" disclaimer="considera critério de aceite, não só status Done" onClick={() => openChart('burndown')} />
@@ -661,8 +687,9 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
 function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const blocked = applyFilters(getBlockedItems(), filters)
-  const sprint14 = applyFilters(getSprintItems('Sprint 14'), filters)
+  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
+  const blocked = applyFilters(byProjects(getBlockedItems(), selProj), filters)
+  const sprint14 = applyFilters(byProjects(getSprintItems('Sprint 14'), selProj), filters)
   const parados = sprint14.filter(w => w.status === 'blocked' || (w.days_blocked ?? 0) >= 2)
 
   const aging = [
@@ -684,7 +711,8 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
     <>
       {smChartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
-      <Grid cols="repeat(auto-fill, minmax(200px, 1fr))">
+      <ProjFilterRow selected={selProj} onChange={setSelProj} />
+      <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
         <KpiCard value={`${sprintHealth || 62}%`} label="Saúde da Sprint" sub={`${parados.length} parados`} disclaimer="% de conclusão em relação à meta da sprint" color={T.warn} alert onClick={() => openSMChart('burndown')} />
         <KpiCard value={String(blocked.length)} label="Impedimentos" sub="ativos" disclaimer="impedimentos formais sem resolução registrada" color={T.crit} alert onClick={() => onNav('list')} />
         <KpiCard value="⚠" label="Sprint Goal" sub="2 itens críticos parados" disclaimer="itens que ameaçam atingir o objetivo da sprint" color={T.warn} onClick={() => onNav('project')} />
@@ -728,7 +756,7 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
 
         <ColSpan>
           <SCard title="Cerimônias & Ações de Facilitação">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
               {cerimonias.map(c => (
                 <div key={c.name} style={{ background: T.bgPage, borderRadius: 8, padding: '12px 14px', cursor: 'pointer' }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: T.text1 }}>{c.name}</div>
@@ -754,8 +782,9 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
 function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
+  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
   const inReview = applyFilters(
-    WORK_ITEMS.filter(w => w.status === 'in-review' || w.type === 'bug'),
+    byProjects(WORK_ITEMS.filter(w => w.status === 'in-review' || w.type === 'bug'), selProj),
     filters
   )
 
@@ -778,7 +807,8 @@ function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
     <>
       {tlChartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
-      <Grid cols="repeat(auto-fill, minmax(200px, 1fr))">
+      <ProjFilterRow selected={selProj} onChange={setSelProj} />
+      <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
         <KpiCard value="74%" label="Saúde Técnica" sub="cobertura de testes" disclaimer="score composto de cobertura, débito e estabilidade" color={T.warn} onClick={() => openTLChart('health')} />
         <KpiCard value={String(critBugs)} label="Bugs Críticos" sub="em prod" disclaimer="bugs P0/P1 bloqueando entrega ou em produção" color={T.crit} alert onClick={() => openTLChart('bugs')} />
         <KpiCard value="4"   label="Deploys/semana" sub="+2 vs semana ant." disclaimer="frequência de deploy — métrica DORA" color={T.success} onClick={() => onNav('reports')} />
@@ -806,7 +836,7 @@ function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
 
         <ColSpan>
           <SCard title="Dívida Técnica / Saúde do Código">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 16 }}>
               {divida.map(d => (
                 <div key={d.area}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -832,15 +862,16 @@ function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
 function DevPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
+  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
 
   const myItems = applyFilters(
-    WORK_ITEMS.filter(w => w.assignee?.name === 'Lucas Ferreira' || w.assignee?.name === 'Ana Lima'),
+    byProjects(WORK_ITEMS.filter(w => w.assignee?.name === 'Lucas Ferreira' || w.assignee?.name === 'Ana Lima'), selProj),
     filters
   ).sort((a, b) => {
     const order: Record<string, number> = { blocked: 0, 'in-review': 1, 'in-progress': 2, testing: 3, todo: 4, backlog: 5 }
     return (order[a.status] ?? 9) - (order[b.status] ?? 9)
   })
-  const blocked = applyFilters(getBlockedItems(), filters).filter(w => w.assignee?.name === 'Lucas Ferreira')
+  const blocked = applyFilters(byProjects(getBlockedItems(), selProj), filters).filter(w => w.assignee?.name === 'Lucas Ferreira')
   const recent = [
     { label: 'Merge PR #280 (fix: ordenação)', date: 'há 4h',   color: T.success },
     { label: 'ALT-143 movida para Bloqueado',  date: 'há 1h',   color: T.crit },
@@ -850,7 +881,8 @@ function DevPanel({ onNav }: { onNav: (v: string) => void }) {
   return (
     <>
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
-      <Grid cols="repeat(auto-fill, minmax(200px, 1fr))">
+      <ProjFilterRow selected={selProj} onChange={setSelProj} />
+      <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
         <KpiCard value={String(myItems.length)} label="Meus Itens Ativos" sub="1 bloqueado" disclaimer="tarefas atribuídas a mim nesta sprint" onClick={() => onNav('list')} />
         <KpiCard value="1" label="Atrasados" sub="BUG-38 vence hoje" disclaimer="itens com prazo hoje ou já vencido" color={T.crit} alert onClick={() => onNav('list')} />
         <KpiCard value={String(blocked.length)} label="Meus Bloqueados" sub="" disclaimer="minhas tarefas aguardando desbloqueio externo" color={T.warn} alert onClick={() => onNav('list')} />
@@ -885,8 +917,9 @@ function DevPanel({ onNav }: { onNav: (v: string) => void }) {
 function UxPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
+  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
   const designItems = applyFilters(
-    WORK_ITEMS.filter(w => w.squad_id === 'squad_design' || (w.tags ?? []).some(t => ['design', 'handoff', 'frontend'].includes(t))),
+    byProjects(WORK_ITEMS.filter(w => w.squad_id === 'squad_design' || (w.tags ?? []).some(t => ['design', 'handoff', 'frontend'].includes(t))), selProj),
     filters
   )
 
@@ -903,7 +936,8 @@ function UxPanel({ onNav }: { onNav: (v: string) => void }) {
   return (
     <>
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
-      <Grid cols="repeat(auto-fill, minmax(200px, 1fr))">
+      <ProjFilterRow selected={selProj} onChange={setSelProj} />
+      <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
         <KpiCard value="8"  label="Fluxos em Design"   sub="3 projetos" disclaimer="fluxos com trabalho de design em progresso" onClick={() => onNav('list')} />
         <KpiCard value="3"  label="Protótipos p/ Val."  sub="aguardando PO/usuário" disclaimer="protótipos aguardando feedback de usuário ou PO" color={T.accent} onClick={() => onNav('list')} />
         <KpiCard value="4"  label="Pendências Críticas" sub="1 acessibilidade" disclaimer="fluxos sem spec, protótipo ou validação completa" color={T.crit} alert onClick={() => onNav('list')} />
@@ -954,8 +988,9 @@ function UxPanel({ onNav }: { onNav: (v: string) => void }) {
 function QaPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const testing = applyFilters(getTestingItems(), filters)
-  const bugs    = applyFilters(WORK_ITEMS.filter(w => w.type === 'bug'), filters)
+  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
+  const testing = applyFilters(byProjects(getTestingItems(), selProj), filters)
+  const bugs    = applyFilters(byProjects(WORK_ITEMS.filter(w => w.type === 'bug'), selProj), filters)
   const cobertura = [
     { criterio: 'Critérios de aceite validados', pct: 68 },
     { criterio: 'Casos de teste documentados',   pct: 45 },
@@ -969,7 +1004,8 @@ function QaPanel({ onNav }: { onNav: (v: string) => void }) {
     <>
       {qaChartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
-      <Grid cols="repeat(auto-fill, minmax(200px, 1fr))">
+      <ProjFilterRow selected={selProj} onChange={setSelProj} />
+      <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
         <KpiCard value={String(testing.length)} label="Aguardando Teste" sub="Ready for QA" disclaimer="itens em fila de QA ou em homologação ativa" onClick={() => onNav('list')} />
         <KpiCard value={String(critAndHighBugs)} label="Bugs Críticos" sub={critAndHighBugs > 0 ? 'requer atenção' : 'tudo ok'} disclaimer="bugs P0/P1 bloqueando entrega da sprint" color={T.crit} alert={critAndHighBugs > 0} onClick={() => openQAChart('bugs')} />
         <KpiCard value="28%" label="Taxa de Rejeição" sub="meta: &lt;15%" disclaimer="% de itens devolvidos ao Dev pelo QA" color={T.warn} alert onClick={() => openQAChart('bugs')} />
@@ -1067,7 +1103,7 @@ function AssignedReportCards({ dashId, tenantId, onNav }: { dashId: DashboardTyp
             Ver todos os relatórios →
           </button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
           {assigned.map(a => {
             const targetDef = ASSIGNMENT_TARGETS.find(t => t.id === target)
             const entry     = REPORT_REGISTRY[a.card_id]

@@ -516,7 +516,7 @@ export default function ModulesPortfolioPage({ onNav }: Props) {
       </div>
 
       {/* KPI strip */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 24 }}>
         {[
           { label: 'Implementados', value: tenantMods.filter(m => m.status === 'implemented').length, color: D.blue },
           { label: 'Em preview',    value: tenantMods.filter(m => m.status === 'preview').length,      color: D.violet },

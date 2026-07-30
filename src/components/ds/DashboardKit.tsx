@@ -2,7 +2,7 @@
  * Altech DashboardKit — shared components for all 10 dashboard panels.
  * Single source of truth. Import from here, never duplicate in panel files.
  */
-import { useState, type ReactNode, type CSSProperties } from 'react'
+import { useState, useRef, useEffect, type ReactNode, type CSSProperties } from 'react'
 import { T } from './tokens'
 import { useSession } from '../../data/SessionContext'
 import { can } from '../../data/permissions'
@@ -134,7 +134,7 @@ export function SCard({ title, action, children, style }: {
   return (
     <div style={{
       background: T.bgSurface, border: `1px solid ${T.border}`,
-      borderRadius: 10, padding: 16, minWidth: 0, overflow: 'hidden', ...style,
+      borderRadius: 10, padding: 16, minWidth: 0, overflowX: 'auto', ...style,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: T.text1 }}>{title}</span>
@@ -157,8 +157,8 @@ export function ProgressBar({ pct, color, height = 4 }: {
 }
 
 // ─── KpiCard — clicking navigates to filtered list ────────────────────────────
-export function KpiCard({ value, label, sub, disclaimer, color, alert, onClick }: {
-  value: string; label: string; sub?: string; disclaimer?: string
+export function KpiCard({ value, label, sub, miniViz, disclaimer, color, alert, onClick }: {
+  value: string; label: string; sub?: string; miniViz?: ReactNode; disclaimer?: string
   color?: string; alert?: boolean; onClick?: () => void
 }) {
   const [hovered, setHovered] = useState(false)
@@ -184,23 +184,194 @@ export function KpiCard({ value, label, sub, disclaimer, color, alert, onClick }
     >
       <div style={{ fontSize: 22, fontWeight: 700, color: color ?? T.text1, lineHeight: 1 }}>{value}</div>
       <div style={{ fontSize: 11, color: T.text2, marginTop: 4 }}>{label}</div>
-      {sub && <div style={{ fontSize: 10, color: T.text3, marginTop: 2 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 10, color: T.text3, marginTop: 2, fontWeight: 500 }}>{sub}</div>}
+      {miniViz && <div style={{ marginTop: 8 }}>{miniViz}</div>}
       {disclaimer && (
-        <div
-          title={disclaimer}
-          style={{
-            fontSize: 10, color: T.text3, marginTop: 6,
-            overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
-            borderTop: `1px solid ${T.border}`, paddingTop: 5,
-            fontStyle: 'italic', opacity: 0.75,
-          }}
-        >{disclaimer}</div>
+        <div style={{
+          marginTop: 'auto', paddingTop: 7,
+          fontSize: 9, color: T.text3,
+          display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden',
+          borderTop: `1px solid ${T.border}`,
+          fontStyle: 'italic', letterSpacing: '0.01em', lineHeight: 1.4,
+        }}>{disclaimer}</div>
       )}
       {clickable && (
-        <div style={{ fontSize: 10, color: T.accent, marginTop: disclaimer ? 4 : 6, opacity: hovered ? 1 : 0, transition: 'opacity 0.15s' }}>
+        <div style={{ fontSize: 10, color: T.accent, marginTop: 4, opacity: hovered ? 1 : 0, transition: 'opacity 0.15s' }}>
           Ver lista →
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── ProjectMultiSelect — shared multi-select for project filtering ───────────
+export interface ProjectOption { id: string; name: string; color?: string }
+
+export function ProjectMultiSelect({
+  projects, selected, onChange,
+}: {
+  projects: ProjectOption[]
+  selected: Set<string>
+  onChange: (s: Set<string>) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function h(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+
+  const allSelected = selected.size >= projects.length
+  const filtered = projects.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
+
+  function toggle(id: string) {
+    const next = new Set(selected)
+    if (next.has(id)) { if (next.size === 1) return; next.delete(id) }
+    else { next.add(id) }
+    onChange(next)
+  }
+
+  const label = allSelected
+    ? `Todos (${projects.length})`
+    : selected.size === 1
+    ? projects.find(p => selected.has(p.id))?.name ?? '1 projeto'
+    : `${selected.size} projetos`
+
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        onKeyDown={e => e.key === 'Escape' && setOpen(false)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '5px 10px', borderRadius: 7, cursor: 'pointer',
+          background: T.bgSurface, border: `1px solid ${open ? T.accent : T.border}`,
+          color: T.text2, fontSize: 12, transition: 'border-color 0.15s',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <rect x="1" y="1.5" width="10" height="1.5" rx="0.75" fill="currentColor"/>
+          <rect x="1" y="5" width="7" height="1.5" rx="0.75" fill="currentColor"/>
+          <rect x="1" y="8.5" width="9" height="1.5" rx="0.75" fill="currentColor"/>
+        </svg>
+        <span style={{ color: allSelected ? T.text2 : T.accent, fontWeight: allSelected ? 400 : 600 }}>
+          Projetos: {label}
+        </span>
+        <svg width="8" height="8" viewBox="0 0 8 8" fill="none"
+          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+          <path d="M1.5 2.5L4 5L6.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 300,
+          background: T.bgSurface, border: `1px solid ${T.border}`,
+          borderRadius: 10, boxShadow: '0 8px 28px rgba(0,0,0,0.5)', minWidth: 220, overflow: 'hidden',
+        }}>
+          <div style={{ padding: '8px 10px', borderBottom: `1px solid ${T.border}` }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: T.bgPage, borderRadius: 6, border: `1px solid ${T.border}`, padding: '5px 8px',
+            }}>
+              <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                <circle cx="4.5" cy="4.5" r="3.5" stroke={T.text3} strokeWidth="1.1"/>
+                <path d="M7.5 7.5l2 2" stroke={T.text3} strokeWidth="1.1" strokeLinecap="round"/>
+              </svg>
+              <input
+                autoFocus
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar projeto…"
+                onKeyDown={e => e.key === 'Escape' && setOpen(false)}
+                style={{ background: 'none', border: 'none', outline: 'none', color: T.text1, fontSize: 12, width: '100%' }}
+              />
+            </div>
+          </div>
+
+          <_ProjRow
+            checked={allSelected}
+            color={T.accent}
+            label="Todos os projetos"
+            count={projects.length}
+            onClick={() => onChange(
+              allSelected
+                ? new Set([projects[0]?.id].filter(Boolean) as string[])
+                : new Set(projects.map(p => p.id))
+            )}
+          />
+
+          <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+            {filtered.map(p => (
+              <_ProjRow
+                key={p.id}
+                checked={selected.has(p.id)}
+                color={p.color}
+                label={p.name}
+                onClick={() => toggle(p.id)}
+              />
+            ))}
+            {filtered.length === 0 && (
+              <div style={{ padding: '12px', fontSize: 12, color: T.text3, textAlign: 'center' }}>
+                Nenhum projeto encontrado
+              </div>
+            )}
+          </div>
+
+          {!allSelected && (
+            <div style={{ padding: '7px 12px', borderTop: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 10, color: T.text3 }}>{selected.size} selecionado{selected.size !== 1 ? 's' : ''}</span>
+              <button
+                onClick={() => { onChange(new Set(projects.map(p => p.id))); setOpen(false) }}
+                style={{ fontSize: 11, color: T.accent, background: 'none', border: 'none', cursor: 'pointer' }}
+              >Mostrar todos</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function _ProjRow({ checked, color, label, count, onClick }: {
+  checked: boolean; color?: string; label: string; count?: number; onClick: () => void
+}) {
+  const [hov, setHov] = useState(false)
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '8px 12px', cursor: 'pointer',
+        background: hov ? T.bgSurface2 : 'transparent',
+        borderBottom: `1px solid ${T.border}`,
+        transition: 'background 0.1s',
+      }}
+    >
+      <span style={{
+        width: 14, height: 14, borderRadius: 4, flexShrink: 0,
+        border: `1.5px solid ${checked ? (color ?? T.accent) : T.border}`,
+        background: checked ? (color ?? T.accent) : 'transparent',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {checked && (
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+            <path d="M1.5 4L3.5 6L6.5 2" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
+      </span>
+      {color && !count && <span style={{ width: 7, height: 7, borderRadius: 2, background: color, flexShrink: 0 }} />}
+      <span style={{ fontSize: 12, color: T.text1, flex: 1 }}>{label}</span>
+      {count !== undefined && <span style={{ fontSize: 10, color: T.text3 }}>{count}</span>}
     </div>
   )
 }

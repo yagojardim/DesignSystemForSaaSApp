@@ -17,16 +17,17 @@ function KpiCard({ label, value, sub, disclaimer, color, trend }: {
     }}>
       <div style={{ fontSize: 10, color: T.text3, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>{label}</div>
       <div style={{ fontSize: 26, fontWeight: 700, color: color ?? T.text1, lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: T.text3, marginTop: 4 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 11, color: T.text3, marginTop: 4, fontWeight: 500 }}>{sub}</div>}
       {trend && <div style={{ fontSize: 10, color: trend.startsWith('+') ? T.success : T.crit, marginTop: 6, fontWeight: 600 }}>{trend}</div>}
       {disclaimer && (
         <div
           title={disclaimer}
           style={{
-            fontSize: 10, color: T.text3, marginTop: 8,
-            overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
-            borderTop: `1px solid ${T.border}`, paddingTop: 5,
-            fontStyle: 'italic', opacity: 0.7,
+            marginTop: 'auto', paddingTop: 7,
+            fontSize: 9, color: T.text3,
+            display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden',
+            borderTop: `1px solid ${T.border}`,
+            fontStyle: 'italic', letterSpacing: '0.01em', lineHeight: 1.4,
           }}
         >{disclaimer}</div>
       )}
@@ -47,7 +48,7 @@ function SectionTitle({ children, action }: { children: React.ReactNode; action?
 
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div style={{ background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 10, padding: 16, minWidth: 0, overflow: 'hidden', ...style }}>
+    <div style={{ background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 10, padding: 16, minWidth: 0, overflowX: 'auto', ...style }}>
       {children}
     </div>
   )
@@ -266,7 +267,7 @@ function AdminDashboard() {
       {/* Módulos */}
       <Card>
         <SectionTitle>Módulos do tenant</SectionTitle>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8 }}>
           {modules.map(m => (
             <div key={m.name} style={{
               background: T.bgSurface2, borderRadius: 8, padding: '10px 12px',
@@ -823,7 +824,7 @@ function TechLeadDashboard() {
       {/* DORA */}
       <Card>
         <SectionTitle>DORA Metrics — saúde técnica do time</SectionTitle>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
           {dora.map(d => (
             <div key={d.label} style={{ background: T.bgSurface2, borderRadius: 8, padding: '12px', border: `1px solid ${d.color}30` }}>
               <div style={{ fontSize: 10, color: T.text3, marginBottom: 4, fontWeight: 600 }}>{d.label}</div>
