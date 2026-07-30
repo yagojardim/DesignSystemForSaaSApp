@@ -9,14 +9,35 @@ const px = (n: number) => `${n}px`
 
 // ─── Chart Components ─────────────────────────────────────────────────────────
 
-export function BurndownChart({ variant = 'full' }: { variant?: 'thumbnail' | 'full' }) {
+export function BurndownChart({
+  variant = 'full',
+  sprintTotal,
+  sprintRemaining,
+}: {
+  variant?: 'thumbnail' | 'full'
+  sprintTotal?: number
+  sprintRemaining?: number
+}) {
   const th = variant === 'thumbnail'
   const W = 520; const H = 180
   const PAD = { top: 12, right: 16, bottom: th ? 8 : 30, left: th ? 8 : 36 }
   const cw = W - PAD.left - PAD.right
   const ch = H - PAD.top - PAD.bottom
-  const days = 14; const maxPts = 40
-  const actual = [38, 35, 35, 31, 31, 28, 24, 24, 20, 20, 16, 12, 8, 4]
+  const days = 14
+  const maxPts = sprintTotal ?? 40
+  // When real sprint data is provided, derive a step-wise burndown curve
+  const actual: number[] = sprintTotal != null && sprintRemaining != null
+    ? (() => {
+        const done = sprintTotal - sprintRemaining
+        const arr: number[] = []
+        for (let i = 0; i < 14; i++) {
+          // Step function: drops happen at roughly even intervals
+          const dropped = i === 0 ? 0 : Math.round(done * Math.min(1, (i / 10)))
+          arr.push(Math.max(sprintRemaining, sprintTotal - dropped))
+        }
+        return arr
+      })()
+    : [38, 35, 35, 31, 31, 28, 24, 24, 20, 20, 16, 12, 8, 4]
   const toX = (d: number) => PAD.left + (d / (days - 1)) * cw
   const toY = (p: number) => PAD.top + ch - (p / maxPts) * ch
   const idealPath = `M ${toX(0)} ${toY(38)} L ${toX(13)} ${toY(0)}`

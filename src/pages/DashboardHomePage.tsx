@@ -29,6 +29,7 @@ import {
 } from '../data/dashboardAssignments'
 import {
   REPORT_REGISTRY, REPORT_CARDS_LIST, ReportChartModal, useChartModal,
+  BurndownChart,
   type ReportEntry,
 } from '../data/reportRegistry'
 import { getBoardsForScope } from '../data/boards'
@@ -308,9 +309,15 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
   const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
-  const sprint14 = applyFilters(byProjects(getSprintItems('Sprint 14', 'proj_001'), selProj), filters)
-  const blocked  = applyFilters(byProjects(getBlockedItems('proj_001'), selProj), filters)
+  const sprint14 = applyFilters(byProjects(getSprintItems('Sprint 14'), selProj), filters)
+  const blocked  = applyFilters(byProjects(getBlockedItems(), selProj), filters)
   const { openChart, chartModal } = useChartModal()
+
+  const pmDone      = sprint14.filter(w => w.status === 'done').length
+  const pmTotal     = sprint14.length || 1
+  const pmProgress  = Math.round((pmDone / pmTotal) * 100)
+  const pmPtTotal   = sprint14.reduce((s, w) => s + (w.points ?? 0), 0) || 38
+  const pmPtDone    = sprint14.filter(w => w.status === 'done').reduce((s, w) => s + (w.points ?? 0), 0)
 
   const team = [
     { name: 'Ana Lima',     i: 'AL', c: '#fb923c', ativas: 4, cap: 5 },
@@ -320,7 +327,7 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
   ]
 
   const nativeCards: MuralNativeCard[] = [
-    { id: 'pm:progress', value: '72%', label: 'Progresso do Projeto', sub: 'Sprint 14 ativo', disclaimer: '% de tarefas concluídas na sprint ativa', miniViz: <MiniBarChart data={[{label:'S10',value:55},{label:'S11',value:61},{label:'S12',value:68},{label:'S13',value:72,current:true}]} />, onClick: () => openChart('burndown') },
+    { id: 'pm:progress', value: `${pmProgress}%`, label: 'Progresso do Projeto', sub: `${pmDone}/${pmTotal} itens concluídos`, disclaimer: '% de tarefas concluídas na sprint ativa', miniViz: <BurndownChart variant="thumbnail" sprintTotal={pmPtTotal} sprintRemaining={pmPtTotal - pmPtDone} />, onClick: () => onNav('project') },
     { id: 'pm:deadline', value: '18d', label: 'Prazo Restante', sub: 'Entrega: 28 ago', disclaimer: 'dias até a data de entrega planejada', miniViz: <MiniSparkline data={[{label:'S10',value:60},{value:45},{value:32},{label:'S13',value:18}]} color="#60a5fa" />, onClick: () => onNav('gantt') },
     { id: 'pm:blocked', value: String(blocked.length), label: 'Bloqueios Ativos', sub: 'ver lista', disclaimer: 'demandas atualmente bloqueadas', color: T.crit, alert: true, miniViz: <MiniSparkline data={[{label:'S8',value:4},{value:3},{value:5},{value:2},{value:3},{label:'S13',value:blocked.length}]} color="#ef4444" />, onClick: () => onNav('list') },
     { id: 'pm:scope', value: '+12%', label: 'Risco de Escopo', sub: 'vs planejamento', disclaimer: 'variação de escopo vs. o planejado', color: T.warn, alert: true, miniViz: <MiniSparkline data={[{label:'S8',value:2},{value:5},{value:7},{value:9},{value:11},{label:'S13',value:12}]} color="#f5a524" />, onClick: () => openChart('criados') },
@@ -673,16 +680,17 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
 
   const unreadCount = getUnreadCountForTenant(MOCK_TENANT.tenant_id)
 
-  // Compute KPI values from real mock data
-  const sprint14Items   = getSprintItems('Sprint 14', 'proj_001')
+  // Compute KPI values from real mock data (respecting selProj filter)
+  const sprint14Items   = byProjects(getSprintItems('Sprint 14'), selProj)
   const totalSprintPts  = sprint14Items.reduce((s, w) => s + (w.points ?? 0), 0) || 38
   const readyPts        = readyItems.reduce((s, w) => s + (w.points ?? 0), 0)
   const coverageReady   = totalSprintPts > 0 ? Math.round((readyPts / totalSprintPts) * 100) : 0
-  const backlogAll      = getBacklogWithAlerts('proj_001')
+  const backlogAll      = getBacklogWithAlerts()
   const healthyItems    = backlogAll.filter(w => !w.tags?.some(t => t.startsWith('Sem '))).length
   const backlogHealth   = backlogAll.length > 0 ? Math.round((healthyItems / backlogAll.length) * 100) : 100
   const doneSprint      = sprint14Items.filter(w => w.status === 'done').length
   const funcProgress    = sprint14Items.length > 0 ? Math.round((doneSprint / sprint14Items.length) * 100) : 0
+  const poPtDone        = sprint14Items.filter(w => w.status === 'done').reduce((s, w) => s + (w.points ?? 0), 0)
 
   const team = [
     { name: 'Ana Lima',  i: 'AL', c: '#fb923c', items: 4, status: 'saudável' as const },
@@ -693,7 +701,7 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
   const nativeCards: MuralNativeCard[] = [
     { id: 'po:ready', value: `${coverageReady}%`, label: 'Cobertura Ready', sub: 'pts prontos ÷ velocity', disclaimer: 'pontos prontos ÷ velocidade média da sprint', miniViz: <MiniBarChart data={[{label:'S10',value:55},{label:'S11',value:62},{label:'S12',value:70},{label:'S13',value:coverageReady,current:true}]} />, onClick: () => onNav('list') },
     { id: 'po:backlog', value: `${backlogHealth}%`, label: 'Saúde do Backlog', sub: 'itens saudáveis ÷ avaliáveis', disclaimer: 'itens saudáveis ÷ total de itens avaliáveis', color: backlogHealth < 60 ? T.warn : T.success, alert: backlogHealth < 60, miniViz: <MiniSparkline data={[{label:'S10',value:80},{value:77},{value:75},{label:'S13',value:backlogHealth}]} color={backlogHealth < 60 ? '#ef4444' : '#34d399'} />, onClick: () => onNav('list') },
-    { id: 'po:progress', value: `${funcProgress || 68}%`, label: 'Progresso Funcional', sub: 'considera aceite do PO', disclaimer: 'considera critério de aceite, não só status Done', miniViz: <MiniBarChart data={[{label:'S10',value:50},{label:'S11',value:58},{label:'S12',value:63},{label:'S13',value:funcProgress||68,current:true}]} />, onClick: () => openChart('burndown') },
+    { id: 'po:progress', value: `${funcProgress || 68}%`, label: 'Progresso Funcional', sub: `${doneSprint}/${sprint14Items.length || 1} aceitos`, disclaimer: 'considera critério de aceite, não só status Done', miniViz: <BurndownChart variant="thumbnail" sprintTotal={totalSprintPts} sprintRemaining={totalSprintPts - poPtDone} />, onClick: () => onNav('project') },
     { id: 'po:msgs', value: unreadCount > 0 ? String(unreadCount) : '0', label: 'Msgs do Cliente', sub: unreadCount > 0 ? 'não lidas — ação necessária' : 'sem pendências', disclaimer: 'mensagens de clientes recebidas não lidas', color: unreadCount > 0 ? T.accent : T.text3, alert: unreadCount > 0, miniViz: <MiniSparkline data={[{label:'D-5',value:2},{value:1},{value:3},{value:2},{value:1},{label:'Hoje',value:unreadCount}]} color={unreadCount > 0 ? '#3b82f6' : '#6b7280'} />, onClick: () => onNav('client-messages') },
   ]
 
@@ -759,11 +767,12 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
     { name: 'Sprint Planning',  data: '28 jul 10h',  status: 'planejado' },
   ]
 
-  const { openChart: openSMChart, chartModal: smChartModal } = useChartModal()
-  const sprintHealth = sprint14.length > 0 ? Math.round(((sprint14.length - parados.length) / sprint14.length) * 100) : 0
+  const sprintHealth  = sprint14.length > 0 ? Math.round(((sprint14.length - parados.length) / sprint14.length) * 100) : 0
+  const smPtTotal     = sprint14.reduce((s, w) => s + (w.points ?? 0), 0) || 38
+  const smPtDone      = sprint14.filter(w => w.status === 'done').reduce((s, w) => s + (w.points ?? 0), 0)
 
   const nativeCards: MuralNativeCard[] = [
-    { id: 'sm:health', value: `${sprintHealth || 62}%`, label: 'Saúde da Sprint', sub: `${parados.length} parados`, disclaimer: '% de conclusão em relação à meta da sprint', color: T.warn, alert: true, miniViz: <MiniBarChart data={[{label:'S8',value:74},{label:'S9',value:68},{label:'S10',value:71},{label:'S11',value:65},{label:'S12',value:70},{label:'S13',value:sprintHealth||62,current:true}]} />, onClick: () => openSMChart('burndown') },
+    { id: 'sm:health', value: `${sprintHealth || 62}%`, label: 'Saúde da Sprint', sub: `${parados.length} parados`, disclaimer: '% de conclusão em relação à meta da sprint', color: T.warn, alert: true, miniViz: <BurndownChart variant="thumbnail" sprintTotal={smPtTotal} sprintRemaining={smPtTotal - smPtDone} />, onClick: () => onNav('project') },
     { id: 'sm:blocked', value: String(blocked.length), label: 'Impedimentos', sub: 'ativos', disclaimer: 'impedimentos formais sem resolução registrada', color: T.crit, alert: true, miniViz: <MiniSparkline data={[{label:'S8',value:3},{value:5},{value:4},{value:6},{value:3},{label:'S13',value:blocked.length}]} color="#ef4444" />, onClick: () => onNav('list') },
     { id: 'sm:goal', value: '⚠', label: 'Sprint Goal', sub: '2 itens críticos parados', disclaimer: 'itens que ameaçam atingir o objetivo da sprint', color: T.warn, miniViz: <MiniBarChart data={[{label:'S10',value:3},{label:'S11',value:2},{label:'S12',value:1},{label:'S13',value:2,current:true}]} showAvg={false} />, onClick: () => onNav('project') },
     { id: 'sm:wip', value: '6', label: 'WIP Atual', sub: 'limite: 5 — excedido', disclaimer: 'itens em andamento vs. limite acordado pelo time', color: T.crit, alert: true, miniViz: <MiniSparkline data={[{label:'S10',value:4},{value:5},{value:6},{label:'S13',value:6}]} color="#ef4444" />, onClick: () => onNav('project') },
@@ -771,7 +780,6 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
 
   return (
     <>
-      {smChartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
       <UnifiedMural dashId="scrum-master" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
