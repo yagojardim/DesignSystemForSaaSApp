@@ -24,6 +24,7 @@ import {
 } from '../data/clientSignals'
 import {
   dismissHomeCard, pinHomeCard, getVisibleHomeCards,
+  dismissNativeCard, restoreNativeCard, getDismissedNative,
   type AssignmentTarget, type HomeCardSlot,
 } from '../data/dashboardAssignments'
 import {
@@ -87,6 +88,51 @@ function ColSpan({ children }: { children: ReactNode }) {
   return <div style={{ gridColumn: '1 / -1' }}>{children}</div>
 }
 
+// ─── Unified mural types & primitives ────────────────────────────────────────
+interface MuralNativeCard {
+  id: string
+  value: string
+  label: string
+  sub?: string
+  disclaimer?: string
+  miniViz?: ReactNode
+  color?: string
+  alert?: boolean
+  onClick?: () => void
+}
+
+function NativeMuralTile({ card, onDismiss }: { card: MuralNativeCard; onDismiss: (id: string) => void }) {
+  const [xHov, setXHov] = useState(false)
+  return (
+    <div style={{ position: 'relative', minWidth: 0 }}>
+      <button
+        title="Remover da Home"
+        onClick={e => { e.stopPropagation(); onDismiss(card.id) }}
+        onMouseEnter={() => setXHov(true)}
+        onMouseLeave={() => setXHov(false)}
+        style={{
+          position: 'absolute', top: 6, right: 6, zIndex: 2,
+          width: 20, height: 20, borderRadius: 4, border: 'none',
+          background: xHov ? `${T.crit}22` : `${T.text3}18`,
+          color: xHov ? T.crit : T.text3,
+          cursor: 'pointer', fontSize: 13, lineHeight: '20px', textAlign: 'center',
+          transition: 'all 0.12s',
+        }}
+      >×</button>
+      <KpiCard
+        value={card.value}
+        label={card.label}
+        sub={card.sub}
+        disclaimer={card.disclaimer}
+        miniViz={card.miniViz}
+        color={card.color}
+        alert={card.alert}
+        onClick={card.onClick}
+      />
+    </div>
+  )
+}
+
 // ─── 1. ADMIN MASTER ─────────────────────────────────────────────────────────
 function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?: () => void }) {
   const [filters, setFilters] = useFilters()
@@ -128,18 +174,20 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
   ]
   const statusC = { active: T.success, blocked: T.crit, inactive: T.neutral }
 
+  const nativeCards: MuralNativeCard[] = [
+    { id: 'admin:projects', value: '3', label: 'Projetos', sub: '2 ativos', disclaimer: 'projetos ativos neste tenant', miniViz: <MiniBarChart data={[{label:'Q1',value:2},{label:'Q2',value:2},{label:'Q3',value:3,current:true}]} showAvg={false} />, onClick: () => onNav('projects-list') },
+    { id: 'admin:boards', value: String(_boards.length), label: 'Boards', sub: `${_activeBoards} ativo${_activeBoards !== 1 ? 's' : ''}`, disclaimer: 'boards de Kanban disponíveis', miniViz: <MiniBarChart data={[{label:'Jan',value:3},{label:'Mar',value:4},{label:'Jun',value:5,current:true}]} showAvg={false} />, onClick: () => onNav('boards-list') },
+    { id: 'admin:modules', value: String(_modCounts.active), label: 'Módulos ativos', sub: `de ${_modCounts.total}`, disclaimer: 'módulos habilitados para este tenant', miniViz: <MiniBarChart data={[{label:'Jan',value:2},{label:'Mar',value:3},{label:'Jun',value:3,current:true}]} showAvg={false} />, onClick: () => onNav('modules') },
+    { id: 'admin:users', value: '11', label: 'Usuários', sub: '9 ativos', disclaimer: 'membros registrados no tenant', miniViz: <MiniSparkline data={[{label:'Jan',value:7},{value:8},{value:9},{value:10},{label:'Jul',value:11}]} />, onClick: () => onNav('team:membros') },
+    { id: 'admin:invites', value: String(_pendingInvites), label: 'Convites', sub: _inviteSub, disclaimer: 'convites pendentes de aceitação', color: _pendingInvites > 0 ? T.warn : undefined, miniViz: <MiniSparkline data={[{label:'Jan',value:0},{value:1},{value:2},{value:3},{label:'Jul',value:2}]} color="#f5a524" />, onClick: () => onNav('team:convites') },
+  ]
+
   return (
     <>
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
-      <div className="responsive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, alignItems: 'stretch' }}>
-        <KpiCard value="3"  label="Projetos" sub="2 ativos" disclaimer="projetos ativos neste tenant" miniViz={<MiniBarChart data={[{label:'Q1',value:2},{label:'Q2',value:2},{label:'Q3',value:3,current:true}]} showAvg={false} />} onClick={() => onNav('projects-list')} />
-        <KpiCard value={String(_boards.length)} label="Boards" sub={`${_activeBoards} ativo${_activeBoards !== 1 ? 's' : ''}`} disclaimer="boards de Kanban disponíveis" miniViz={<MiniBarChart data={[{label:'Jan',value:3},{label:'Mar',value:4},{label:'Jun',value:5,current:true}]} showAvg={false} />} onClick={() => onNav('boards-list')} />
-        <KpiCard value={String(_modCounts.active)} label="Módulos ativos" sub={`de ${_modCounts.total}`} disclaimer="módulos habilitados para este tenant" miniViz={<MiniBarChart data={[{label:'Jan',value:2},{label:'Mar',value:3},{label:'Jun',value:3,current:true}]} showAvg={false} />} onClick={() => onNav('modules')} />
-        <KpiCard value="11" label="Usuários" sub="9 ativos" disclaimer="membros registrados no tenant" miniViz={<MiniSparkline data={[{label:'Jan',value:7},{value:8},{value:9},{value:10},{label:'Jul',value:11}]} />} onClick={() => onNav('team:membros')} />
-        <KpiCard value={String(_pendingInvites)} label="Convites" sub={_inviteSub} disclaimer="convites pendentes de aceitação" color={_pendingInvites > 0 ? T.warn : undefined} miniViz={<MiniSparkline data={[{label:'Jan',value:0},{value:1},{value:2},{value:3},{label:'Jul',value:2}]} color="#f5a524" />} onClick={() => onNav('team:convites')} />
-      </div>
+      <UnifiedMural dashId="admin" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
-      <div style={{ marginTop: 12 }}>
+      <div style={{ marginTop: 4 }}>
         <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
       </div>
 
@@ -212,19 +260,21 @@ function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
     { name: 'Mobile App v2',    squad: 'Growth',   rag: 'healthy', pct: 85, days: '60d restantes' },
   ]
 
+  const nativeCards: MuralNativeCard[] = [
+    { id: 'pmo:projects', value: '4', label: 'Projetos Ativos', sub: '2 no prazo', disclaimer: 'projetos com sprint ativa ou em andamento', miniViz: <MiniBarChart data={[{label:'S10',value:3},{label:'S11',value:4},{label:'S12',value:4},{label:'S13',value:4,current:true}]} showAvg={false} />, onClick: () => onNav('projects-list') },
+    { id: 'pmo:risk', value: '2', label: 'Em Risco / Atrasados', sub: '1 crítico', disclaimer: 'projetos com RAG amarelo ou vermelho', color: T.warn, alert: true, miniViz: <MiniSparkline data={[{label:'S8',value:1},{value:2},{value:3},{value:2},{value:1},{label:'S13',value:2}]} color="#f5a524" />, onClick: () => onNav('reports') },
+    { id: 'pmo:predictability', value: '71%', label: 'Previsibilidade', sub: 'meta: 80%', disclaimer: '% do planejado efetivamente entregue', miniViz: <MiniBarChart data={[{label:'S8',value:18},{label:'S9',value:22},{label:'S10',value:19},{label:'S11',value:25},{label:'S12',value:21},{label:'S13',value:22,current:true}]} />, onClick: () => openChart('velocity') },
+    { id: 'pmo:delivery', value: '67%', label: 'Planejado × Concluído', sub: 'Q2 2025', disclaimer: 'comparativo de entrega vs. compromisso da sprint', miniViz: <MiniBarChart data={[{label:'S8',value:62},{label:'S9',value:65},{label:'S10',value:71},{label:'S11',value:68},{label:'S12',value:70},{label:'S13',value:67,current:true}]} />, onClick: () => openChart('criados') },
+  ]
+
   return (
     <>
       {chartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
-      <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
-        <KpiCard value="4"   label="Projetos Ativos"      sub="2 no prazo"   disclaimer="projetos com sprint ativa ou em andamento" miniViz={<MiniBarChart data={[{label:'S10',value:3},{label:'S11',value:4},{label:'S12',value:4},{label:'S13',value:4,current:true}]} showAvg={false} />} onClick={() => onNav('projects-list')} />
-        <KpiCard value="2"   label="Em Risco / Atrasados" sub="1 crítico"    disclaimer="projetos com RAG amarelo ou vermelho" color={T.warn} alert miniViz={<MiniSparkline data={[{label:'S8',value:1},{value:2},{value:3},{value:2},{value:1},{label:'S13',value:2}]} color="#f5a524" />} onClick={() => onNav('reports')} />
-        <KpiCard value="71%" label="Previsibilidade"      sub="meta: 80%"    disclaimer="% do planejado efetivamente entregue" miniViz={<MiniBarChart data={[{label:'S8',value:18},{label:'S9',value:22},{label:'S10',value:19},{label:'S11',value:25},{label:'S12',value:21},{label:'S13',value:22,current:true}]} />} onClick={() => openChart('velocity')} />
-        <KpiCard value="67%" label="Planejado × Concluído" sub="Q2 2025"    disclaimer="comparativo de entrega vs. compromisso da sprint" miniViz={<MiniBarChart data={[{label:'S8',value:62},{label:'S9',value:65},{label:'S10',value:71},{label:'S11',value:68},{label:'S12',value:70},{label:'S13',value:67,current:true}]} />} onClick={() => openChart('criados')} />
-      </Grid>
+      <UnifiedMural dashId="pmo" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
-      <div style={{ marginTop: 12 }}>
+      <div style={{ marginTop: 4 }}>
         <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
       </div>
 
@@ -269,19 +319,21 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
     { name: 'Bruno S.',     i: 'BS', c: '#fbbf24', ativas: 3, cap: 5 },
   ]
 
+  const nativeCards: MuralNativeCard[] = [
+    { id: 'pm:progress', value: '72%', label: 'Progresso do Projeto', sub: 'Sprint 14 ativo', disclaimer: '% de tarefas concluídas na sprint ativa', miniViz: <MiniBarChart data={[{label:'S10',value:55},{label:'S11',value:61},{label:'S12',value:68},{label:'S13',value:72,current:true}]} />, onClick: () => openChart('burndown') },
+    { id: 'pm:deadline', value: '18d', label: 'Prazo Restante', sub: 'Entrega: 28 ago', disclaimer: 'dias até a data de entrega planejada', miniViz: <MiniSparkline data={[{label:'S10',value:60},{value:45},{value:32},{label:'S13',value:18}]} color="#60a5fa" />, onClick: () => onNav('gantt') },
+    { id: 'pm:blocked', value: String(blocked.length), label: 'Bloqueios Ativos', sub: 'ver lista', disclaimer: 'demandas atualmente bloqueadas', color: T.crit, alert: true, miniViz: <MiniSparkline data={[{label:'S8',value:4},{value:3},{value:5},{value:2},{value:3},{label:'S13',value:blocked.length}]} color="#ef4444" />, onClick: () => onNav('list') },
+    { id: 'pm:scope', value: '+12%', label: 'Risco de Escopo', sub: 'vs planejamento', disclaimer: 'variação de escopo vs. o planejado', color: T.warn, alert: true, miniViz: <MiniSparkline data={[{label:'S8',value:2},{value:5},{value:7},{value:9},{value:11},{label:'S13',value:12}]} color="#f5a524" />, onClick: () => openChart('criados') },
+  ]
+
   return (
     <>
       {chartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
-      <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
-        <KpiCard value="72%" label="Progresso do Projeto" sub="Sprint 14 ativo" disclaimer="% de tarefas concluídas na sprint ativa" miniViz={<MiniBarChart data={[{label:'S10',value:55},{label:'S11',value:61},{label:'S12',value:68},{label:'S13',value:72,current:true}]} />} onClick={() => openChart('burndown')} />
-        <KpiCard value="18d" label="Prazo Restante"       sub="Entrega: 28 ago" disclaimer="dias até a data de entrega planejada" miniViz={<MiniSparkline data={[{label:'S10',value:60},{value:45},{value:32},{label:'S13',value:18}]} color="#60a5fa" />} onClick={() => onNav('gantt')} />
-        <KpiCard value={String(blocked.length)} label="Bloqueios Ativos" sub="ver lista" disclaimer="demandas atualmente bloqueadas" color={T.crit} alert miniViz={<MiniSparkline data={[{label:'S8',value:4},{value:3},{value:5},{value:2},{value:3},{label:'S13',value:blocked.length}]} color="#ef4444" />} onClick={() => onNav('list')} />
-        <KpiCard value="+12%" label="Risco de Escopo"     sub="vs planejamento" disclaimer="variação de escopo vs. o planejado" color={T.warn} alert miniViz={<MiniSparkline data={[{label:'S8',value:2},{value:5},{value:7},{value:9},{value:11},{label:'S13',value:12}]} color="#f5a524" />} onClick={() => openChart('criados')} />
-      </Grid>
+      <UnifiedMural dashId="project-manager" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
-      <div style={{ marginTop: 12 }}>
+      <div style={{ marginTop: 4 }}>
         <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
       </div>
 
@@ -346,17 +398,19 @@ function ProductManagerPanel({ onNav }: { onNav: (v: string) => void }) {
     { epic: 'Automações',           quarter: 'Q4 2025', status: 'Planejado',    valor: 'Eficiência do time' },
   ]
 
+  const nativeCards: MuralNativeCard[] = [
+    { id: 'pdm:mau', value: '930', label: 'MAU', sub: '+8% vs mês ant.', disclaimer: 'usuários únicos ativos nos últimos 30 dias', color: T.success, miniViz: <MiniSparkline data={[{label:'Jan',value:720},{value:750},{value:800},{value:860},{value:900},{label:'Jun',value:930}]} color="#34d399" />, onClick: () => onNav('reports') },
+    { id: 'pdm:stickiness', value: '7.5%', label: 'Stickiness', sub: 'DAU/MAU — meta 10-20%', disclaimer: 'frequência de uso: ativos diários ÷ mensais', color: T.warn, miniViz: <MiniSparkline data={[{label:'Jan',value:6.1},{value:6.4},{value:6.8},{value:7.0},{value:7.2},{label:'Jun',value:7.5}]} color="#f5a524" />, onClick: () => onNav('reports') },
+    { id: 'pdm:churn', value: '3.2%', label: 'Churn Rate', sub: 'meta: <2%', disclaimer: 'taxa de abandono por tenant — sem impacto billing', color: T.crit, alert: true, miniViz: <MiniSparkline data={[{label:'Jan',value:2.8},{value:2.9},{value:3.0},{value:3.1},{value:3.2},{label:'Jun',value:3.2}]} color="#ef4444" />, onClick: () => onNav('reports') },
+    { id: 'pdm:adoption', value: '52%', label: 'Adoção de Features', sub: 'base elegível', disclaimer: '% médio de adoção sobre base elegível por feature', miniViz: <MiniBarChart data={[{label:'Jan',value:38},{label:'Feb',value:42},{label:'Mar',value:46},{label:'Abr',value:49},{label:'Mai',value:51},{label:'Jun',value:52,current:true}]} />, onClick: () => onNav('reports') },
+  ]
+
   return (
     <>
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
-      <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
-        <KpiCard value="930"  label="MAU"              sub="+8% vs mês ant." disclaimer="usuários únicos ativos nos últimos 30 dias" color={T.success} miniViz={<MiniSparkline data={[{label:'Jan',value:720},{value:750},{value:800},{value:860},{value:900},{label:'Jun',value:930}]} color="#34d399" />} onClick={() => onNav('reports')} />
-        <KpiCard value="7.5%" label="Stickiness"       sub="DAU/MAU — meta 10-20%" disclaimer="frequência de uso: ativos diários ÷ mensais" color={T.warn} miniViz={<MiniSparkline data={[{label:'Jan',value:6.1},{value:6.4},{value:6.8},{value:7.0},{value:7.2},{label:'Jun',value:7.5}]} color="#f5a524" />} onClick={() => onNav('reports')} />
-        <KpiCard value="3.2%" label="Churn Rate"       sub="meta: &lt;2%" disclaimer="taxa de abandono por tenant — sem impacto billing" color={T.crit} alert miniViz={<MiniSparkline data={[{label:'Jan',value:2.8},{value:2.9},{value:3.0},{value:3.1},{value:3.2},{label:'Jun',value:3.2}]} color="#ef4444" />} onClick={() => onNav('reports')} />
-        <KpiCard value="52%"  label="Adoção de Features" sub="base elegível" disclaimer="% médio de adoção sobre base elegível por feature" miniViz={<MiniBarChart data={[{label:'Jan',value:38},{label:'Feb',value:42},{label:'Mar',value:46},{label:'Abr',value:49},{label:'Mai',value:51},{label:'Jun',value:52,current:true}]} />} onClick={() => onNav('reports')} />
-      </Grid>
+      <UnifiedMural dashId="product-manager" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
-      <div style={{ marginTop: 12 }}>
+      <div style={{ marginTop: 4 }}>
         <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
       </div>
 
@@ -636,28 +690,21 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
     { name: 'Bruno S.',  i: 'BS', c: '#fbbf24', items: 3, status: 'atenção'  as const },
     { name: '—',         i: '?',  c: '#555',    items: 2, status: 'sem-resp' as const },
   ]
+  const nativeCards: MuralNativeCard[] = [
+    { id: 'po:ready', value: `${coverageReady}%`, label: 'Cobertura Ready', sub: 'pts prontos ÷ velocity', disclaimer: 'pontos prontos ÷ velocidade média da sprint', miniViz: <MiniBarChart data={[{label:'S10',value:55},{label:'S11',value:62},{label:'S12',value:70},{label:'S13',value:coverageReady,current:true}]} />, onClick: () => onNav('list') },
+    { id: 'po:backlog', value: `${backlogHealth}%`, label: 'Saúde do Backlog', sub: 'itens saudáveis ÷ avaliáveis', disclaimer: 'itens saudáveis ÷ total de itens avaliáveis', color: backlogHealth < 60 ? T.warn : T.success, alert: backlogHealth < 60, miniViz: <MiniSparkline data={[{label:'S10',value:80},{value:77},{value:75},{label:'S13',value:backlogHealth}]} color={backlogHealth < 60 ? '#ef4444' : '#34d399'} />, onClick: () => onNav('list') },
+    { id: 'po:progress', value: `${funcProgress || 68}%`, label: 'Progresso Funcional', sub: 'considera aceite do PO', disclaimer: 'considera critério de aceite, não só status Done', miniViz: <MiniBarChart data={[{label:'S10',value:50},{label:'S11',value:58},{label:'S12',value:63},{label:'S13',value:funcProgress||68,current:true}]} />, onClick: () => openChart('burndown') },
+    { id: 'po:msgs', value: unreadCount > 0 ? String(unreadCount) : '0', label: 'Msgs do Cliente', sub: unreadCount > 0 ? 'não lidas — ação necessária' : 'sem pendências', disclaimer: 'mensagens de clientes recebidas não lidas', color: unreadCount > 0 ? T.accent : T.text3, alert: unreadCount > 0, miniViz: <MiniSparkline data={[{label:'D-5',value:2},{value:1},{value:3},{value:2},{value:1},{label:'Hoje',value:unreadCount}]} color={unreadCount > 0 ? '#3b82f6' : '#6b7280'} />, onClick: () => onNav('client-messages') },
+  ]
+
   return (
     <>
       {chartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
-      <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
-        <KpiCard value={`${coverageReady}%`} label="Cobertura Ready" sub="pts prontos ÷ velocity" disclaimer="pontos prontos ÷ velocidade média da sprint" miniViz={<MiniBarChart data={[{label:'S10',value:55},{label:'S11',value:62},{label:'S12',value:70},{label:'S13',value:coverageReady,current:true}]} />} onClick={() => onNav('list')} />
-        <KpiCard value={`${backlogHealth}%`} label="Saúde do Backlog" sub="itens saudáveis ÷ avaliáveis" disclaimer="itens saudáveis ÷ total de itens avaliáveis" color={backlogHealth < 60 ? T.warn : T.success} alert={backlogHealth < 60} miniViz={<MiniSparkline data={[{label:'S10',value:80},{value:77},{value:75},{label:'S13',value:backlogHealth}]} color={backlogHealth < 60 ? '#ef4444' : '#34d399'} />} onClick={() => onNav('list')} />
-        <KpiCard value={`${funcProgress || 68}%`} label="Progresso Funcional" sub="considera aceite do PO" disclaimer="considera critério de aceite, não só status Done" miniViz={<MiniBarChart data={[{label:'S10',value:50},{label:'S11',value:58},{label:'S12',value:63},{label:'S13',value:funcProgress||68,current:true}]} />} onClick={() => openChart('burndown')} />
-        <KpiCard
-          value={unreadCount > 0 ? String(unreadCount) : '0'}
-          label="Msgs do Cliente"
-          sub={unreadCount > 0 ? 'não lidas — ação necessária' : 'sem pendências'}
-          disclaimer="mensagens de clientes recebidas não lidas"
-          color={unreadCount > 0 ? T.accent : T.text3}
-          alert={unreadCount > 0}
-          miniViz={<MiniSparkline data={[{label:'D-5',value:2},{value:1},{value:3},{value:2},{value:1},{label:'Hoje',value:unreadCount}]} color={unreadCount > 0 ? '#3b82f6' : '#6b7280'} />}
-          onClick={() => onNav('client-messages')}
-        />
-      </Grid>
+      <UnifiedMural dashId="product-owner" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
-      <div style={{ marginTop: 12 }}>
+      <div style={{ marginTop: 4 }}>
         <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
       </div>
 
@@ -715,19 +762,21 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
   const { openChart: openSMChart, chartModal: smChartModal } = useChartModal()
   const sprintHealth = sprint14.length > 0 ? Math.round(((sprint14.length - parados.length) / sprint14.length) * 100) : 0
 
+  const nativeCards: MuralNativeCard[] = [
+    { id: 'sm:health', value: `${sprintHealth || 62}%`, label: 'Saúde da Sprint', sub: `${parados.length} parados`, disclaimer: '% de conclusão em relação à meta da sprint', color: T.warn, alert: true, miniViz: <MiniBarChart data={[{label:'S8',value:74},{label:'S9',value:68},{label:'S10',value:71},{label:'S11',value:65},{label:'S12',value:70},{label:'S13',value:sprintHealth||62,current:true}]} />, onClick: () => openSMChart('burndown') },
+    { id: 'sm:blocked', value: String(blocked.length), label: 'Impedimentos', sub: 'ativos', disclaimer: 'impedimentos formais sem resolução registrada', color: T.crit, alert: true, miniViz: <MiniSparkline data={[{label:'S8',value:3},{value:5},{value:4},{value:6},{value:3},{label:'S13',value:blocked.length}]} color="#ef4444" />, onClick: () => onNav('list') },
+    { id: 'sm:goal', value: '⚠', label: 'Sprint Goal', sub: '2 itens críticos parados', disclaimer: 'itens que ameaçam atingir o objetivo da sprint', color: T.warn, miniViz: <MiniBarChart data={[{label:'S10',value:3},{label:'S11',value:2},{label:'S12',value:1},{label:'S13',value:2,current:true}]} showAvg={false} />, onClick: () => onNav('project') },
+    { id: 'sm:wip', value: '6', label: 'WIP Atual', sub: 'limite: 5 — excedido', disclaimer: 'itens em andamento vs. limite acordado pelo time', color: T.crit, alert: true, miniViz: <MiniSparkline data={[{label:'S10',value:4},{value:5},{value:6},{label:'S13',value:6}]} color="#ef4444" />, onClick: () => onNav('project') },
+  ]
+
   return (
     <>
       {smChartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
-      <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
-        <KpiCard value={`${sprintHealth || 62}%`} label="Saúde da Sprint" sub={`${parados.length} parados`} disclaimer="% de conclusão em relação à meta da sprint" color={T.warn} alert miniViz={<MiniBarChart data={[{label:'S8',value:74},{label:'S9',value:68},{label:'S10',value:71},{label:'S11',value:65},{label:'S12',value:70},{label:'S13',value:sprintHealth||62,current:true}]} />} onClick={() => openSMChart('burndown')} />
-        <KpiCard value={String(blocked.length)} label="Impedimentos" sub="ativos" disclaimer="impedimentos formais sem resolução registrada" color={T.crit} alert miniViz={<MiniSparkline data={[{label:'S8',value:3},{value:5},{value:4},{value:6},{value:3},{label:'S13',value:blocked.length}]} color="#ef4444" />} onClick={() => onNav('list')} />
-        <KpiCard value="⚠" label="Sprint Goal" sub="2 itens críticos parados" disclaimer="itens que ameaçam atingir o objetivo da sprint" color={T.warn} miniViz={<MiniBarChart data={[{label:'S10',value:3},{label:'S11',value:2},{label:'S12',value:1},{label:'S13',value:2,current:true}]} showAvg={false} />} onClick={() => onNav('project')} />
-        <KpiCard value="6" label="WIP Atual" sub="limite: 5 — excedido" disclaimer="itens em andamento vs. limite acordado pelo time" color={T.crit} alert miniViz={<MiniSparkline data={[{label:'S10',value:4},{value:5},{value:6},{label:'S13',value:6}]} color="#ef4444" />} onClick={() => onNav('project')} />
-      </Grid>
+      <UnifiedMural dashId="scrum-master" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
-      <div style={{ marginTop: 12 }}>
+      <div style={{ marginTop: 4 }}>
         <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
       </div>
 
@@ -811,19 +860,21 @@ function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
   const { openChart: openTLChart, chartModal: tlChartModal } = useChartModal()
   const critBugs = WORK_ITEMS.filter(w => w.type === 'bug' && (w.priority === 'critical' || w.priority === 'high')).length
 
+  const nativeCards: MuralNativeCard[] = [
+    { id: 'tl:health', value: '74%', label: 'Saúde Técnica', sub: 'cobertura de testes', disclaimer: 'score composto de cobertura, débito e estabilidade', color: T.warn, miniViz: <MiniBarChart data={[{label:'S8',value:70},{label:'S9',value:72},{label:'S10',value:69},{label:'S11',value:73},{label:'S12',value:71},{label:'S13',value:74,current:true}]} />, onClick: () => openTLChart('health') },
+    { id: 'tl:bugs', value: String(critBugs), label: 'Bugs Críticos', sub: 'em prod', disclaimer: 'bugs P0/P1 bloqueando entrega ou em produção', color: T.crit, alert: true, miniViz: <MiniSparkline data={[{label:'S8',value:8},{value:6},{value:7},{value:5},{value:4},{label:'S13',value:critBugs}]} color="#ef4444" />, onClick: () => openTLChart('bugs') },
+    { id: 'tl:deploys', value: '4', label: 'Deploys/semana', sub: '+2 vs semana ant.', disclaimer: 'frequência de deploy — métrica DORA', color: T.success, miniViz: <MiniBarChart data={[{label:'S-5',value:3},{label:'S-4',value:4},{label:'S-3',value:3},{label:'S-2',value:5},{label:'S-1',value:4},{label:'Atual',value:4,current:true}]} />, onClick: () => onNav('reports') },
+    { id: 'tl:errors', value: '0.8%', label: 'Error Rate', sub: 'meta: <0.5%', disclaimer: 'taxa de erro em produção nas últimas 24h', color: T.warn, alert: true, miniViz: <MiniSparkline data={[{label:'D-5',value:0.4},{value:0.5},{value:0.6},{value:0.7},{value:0.8},{label:'Hoje',value:0.8}]} color="#f5a524" />, onClick: () => onNav('reports') },
+  ]
+
   return (
     <>
       {tlChartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
-      <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
-        <KpiCard value="74%" label="Saúde Técnica" sub="cobertura de testes" disclaimer="score composto de cobertura, débito e estabilidade" color={T.warn} miniViz={<MiniBarChart data={[{label:'S8',value:70},{label:'S9',value:72},{label:'S10',value:69},{label:'S11',value:73},{label:'S12',value:71},{label:'S13',value:74,current:true}]} />} onClick={() => openTLChart('health')} />
-        <KpiCard value={String(critBugs)} label="Bugs Críticos" sub="em prod" disclaimer="bugs P0/P1 bloqueando entrega ou em produção" color={T.crit} alert miniViz={<MiniSparkline data={[{label:'S8',value:8},{value:6},{value:7},{value:5},{value:4},{label:'S13',value:critBugs}]} color="#ef4444" />} onClick={() => openTLChart('bugs')} />
-        <KpiCard value="4"   label="Deploys/semana" sub="+2 vs semana ant." disclaimer="frequência de deploy — métrica DORA" color={T.success} miniViz={<MiniBarChart data={[{label:'S-5',value:3},{label:'S-4',value:4},{label:'S-3',value:3},{label:'S-2',value:5},{label:'S-1',value:4},{label:'Atual',value:4,current:true}]} />} onClick={() => onNav('reports')} />
-        <KpiCard value="0.8%" label="Error Rate" sub="meta: &lt;0.5%" disclaimer="taxa de erro em produção nas últimas 24h" color={T.warn} alert miniViz={<MiniSparkline data={[{label:'D-5',value:0.4},{value:0.5},{value:0.6},{value:0.7},{value:0.8},{label:'Hoje',value:0.8}]} color="#f5a524" />} onClick={() => onNav('reports')} />
-      </Grid>
+      <UnifiedMural dashId="tech-lead" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
-      <div style={{ marginTop: 12 }}>
+      <div style={{ marginTop: 4 }}>
         <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
       </div>
 
@@ -886,18 +937,20 @@ function DevPanel({ onNav }: { onNav: (v: string) => void }) {
     { label: 'Comentário em ALT-141',          date: 'há 2h',   color: T.accent },
   ]
 
+  const nativeCards: MuralNativeCard[] = [
+    { id: 'dev:items', value: String(myItems.length), label: 'Meus Itens Ativos', sub: '1 bloqueado', disclaimer: 'tarefas atribuídas a mim nesta sprint', miniViz: <MiniBarChart data={[{label:'S10',value:12},{label:'S11',value:14},{label:'S12',value:11},{label:'S13',value:myItems.length,current:true}]} showAvg={false} />, onClick: () => onNav('list') },
+    { id: 'dev:late', value: '1', label: 'Atrasados', sub: 'BUG-38 vence hoje', disclaimer: 'itens com prazo hoje ou já vencido', color: T.crit, alert: true, miniViz: <MiniSparkline data={[{label:'S10',value:0},{value:1},{value:2},{value:1},{value:1},{label:'S13',value:1}]} color="#ef4444" />, onClick: () => onNav('list') },
+    { id: 'dev:blocked', value: String(blocked.length), label: 'Meus Bloqueados', sub: '', disclaimer: 'minhas tarefas aguardando desbloqueio externo', color: T.warn, alert: true, miniViz: <MiniSparkline data={[{label:'S10',value:1},{value:0},{value:2},{label:'S13',value:blocked.length}]} color="#f5a524" />, onClick: () => onNav('list') },
+    { id: 'dev:prs', value: '2', label: 'PRs Abertos', sub: '1 precisa de ação', disclaimer: 'pull requests abertos nos quais estou envolvido', color: T.accent, miniViz: <MiniBarChart data={[{label:'S-4',value:1},{label:'S-3',value:3},{label:'S-2',value:2},{label:'Atual',value:2,current:true}]} showAvg={false} />, onClick: () => onNav('project') },
+  ]
+
   return (
     <>
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
-      <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
-        <KpiCard value={String(myItems.length)} label="Meus Itens Ativos" sub="1 bloqueado" disclaimer="tarefas atribuídas a mim nesta sprint" miniViz={<MiniBarChart data={[{label:'S10',value:12},{label:'S11',value:14},{label:'S12',value:11},{label:'S13',value:myItems.length,current:true}]} showAvg={false} />} onClick={() => onNav('list')} />
-        <KpiCard value="1" label="Atrasados" sub="BUG-38 vence hoje" disclaimer="itens com prazo hoje ou já vencido" color={T.crit} alert miniViz={<MiniSparkline data={[{label:'S10',value:0},{value:1},{value:2},{value:1},{value:1},{label:'S13',value:1}]} color="#ef4444" />} onClick={() => onNav('list')} />
-        <KpiCard value={String(blocked.length)} label="Meus Bloqueados" sub="" disclaimer="minhas tarefas aguardando desbloqueio externo" color={T.warn} alert miniViz={<MiniSparkline data={[{label:'S10',value:1},{value:0},{value:2},{label:'S13',value:blocked.length}]} color="#f5a524" />} onClick={() => onNav('list')} />
-        <KpiCard value="2" label="PRs Abertos" sub="1 precisa de ação" disclaimer="pull requests abertos nos quais estou envolvido" color={T.accent} miniViz={<MiniBarChart data={[{label:'S-4',value:1},{label:'S-3',value:3},{label:'S-2',value:2},{label:'Atual',value:2,current:true}]} showAvg={false} />} onClick={() => onNav('project')} />
-      </Grid>
+      <UnifiedMural dashId="dev" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
-      <div style={{ marginTop: 12 }}>
+      <div style={{ marginTop: 4 }}>
         <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
       </div>
 
@@ -941,18 +994,20 @@ function UxPanel({ onNav }: { onNav: (v: string) => void }) {
     { component: 'Badge',   issue: 'Tamanho inconsistente com Figma' },
   ]
 
+  const nativeCards: MuralNativeCard[] = [
+    { id: 'ux:flows', value: '8', label: 'Fluxos em Design', sub: '3 projetos', disclaimer: 'fluxos com trabalho de design em progresso', miniViz: <MiniBarChart data={[{label:'S10',value:5},{label:'S11',value:7},{label:'S12',value:6},{label:'S13',value:8,current:true}]} showAvg={false} />, onClick: () => onNav('list') },
+    { id: 'ux:prototypes', value: '3', label: 'Protótipos p/ Val.', sub: 'aguardando PO/usuário', disclaimer: 'protótipos aguardando feedback de usuário ou PO', color: T.accent, miniViz: <MiniSparkline data={[{label:'S10',value:1},{value:2},{value:4},{label:'S13',value:3}]} color="#3b82f6" />, onClick: () => onNav('list') },
+    { id: 'ux:pending', value: '4', label: 'Pendências Críticas', sub: '1 acessibilidade', disclaimer: 'fluxos sem spec, protótipo ou validação completa', color: T.crit, alert: true, miniViz: <MiniSparkline data={[{label:'S10',value:6},{value:5},{value:5},{label:'S13',value:4}]} color="#ef4444" />, onClick: () => onNav('list') },
+    { id: 'ux:handoff', value: '1', label: 'Handoff Pronto', sub: 'Dashboard por Papel', disclaimer: 'entregas de design prontas para implementação', color: T.success, miniViz: <MiniBarChart data={[{label:'S10',value:0},{label:'S11',value:2},{label:'S12',value:1},{label:'S13',value:1,current:true}]} showAvg={false} />, onClick: () => onNav('list') },
+  ]
+
   return (
     <>
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
-      <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
-        <KpiCard value="8"  label="Fluxos em Design"   sub="3 projetos" disclaimer="fluxos com trabalho de design em progresso" miniViz={<MiniBarChart data={[{label:'S10',value:5},{label:'S11',value:7},{label:'S12',value:6},{label:'S13',value:8,current:true}]} showAvg={false} />} onClick={() => onNav('list')} />
-        <KpiCard value="3"  label="Protótipos p/ Val."  sub="aguardando PO/usuário" disclaimer="protótipos aguardando feedback de usuário ou PO" color={T.accent} miniViz={<MiniSparkline data={[{label:'S10',value:1},{value:2},{value:4},{label:'S13',value:3}]} color="#3b82f6" />} onClick={() => onNav('list')} />
-        <KpiCard value="4"  label="Pendências Críticas" sub="1 acessibilidade" disclaimer="fluxos sem spec, protótipo ou validação completa" color={T.crit} alert miniViz={<MiniSparkline data={[{label:'S10',value:6},{value:5},{value:5},{label:'S13',value:4}]} color="#ef4444" />} onClick={() => onNav('list')} />
-        <KpiCard value="1"  label="Handoff Pronto" sub="Dashboard por Papel" disclaimer="entregas de design prontas para implementação" color={T.success} miniViz={<MiniBarChart data={[{label:'S10',value:0},{label:'S11',value:2},{label:'S12',value:1},{label:'S13',value:1,current:true}]} showAvg={false} />} onClick={() => onNav('list')} />
-      </Grid>
+      <UnifiedMural dashId="ux" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
-      <div style={{ marginTop: 12 }}>
+      <div style={{ marginTop: 4 }}>
         <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
       </div>
 
@@ -1008,19 +1063,21 @@ function QaPanel({ onNav }: { onNav: (v: string) => void }) {
   const { openChart: openQAChart, chartModal: qaChartModal } = useChartModal()
   const critAndHighBugs = bugs.filter(b => b.priority === 'critical' || b.priority === 'high').length
 
+  const nativeCards: MuralNativeCard[] = [
+    { id: 'qa:queue', value: String(testing.length), label: 'Aguardando Teste', sub: 'Ready for QA', disclaimer: 'itens em fila de QA ou em homologação ativa', miniViz: <MiniBarChart data={[{label:'S10',value:8},{label:'S11',value:10},{label:'S12',value:7},{label:'S13',value:testing.length,current:true}]} showAvg={false} />, onClick: () => onNav('list') },
+    { id: 'qa:bugs', value: String(critAndHighBugs), label: 'Bugs Críticos', sub: critAndHighBugs > 0 ? 'requer atenção' : 'tudo ok', disclaimer: 'bugs P0/P1 bloqueando entrega da sprint', color: T.crit, alert: critAndHighBugs > 0, miniViz: <MiniSparkline data={[{label:'S8',value:9},{value:7},{value:8},{value:6},{value:5},{label:'S13',value:critAndHighBugs}]} color="#ef4444" />, onClick: () => openQAChart('bugs') },
+    { id: 'qa:rejection', value: '28%', label: 'Taxa de Rejeição', sub: 'meta: <15%', disclaimer: '% de itens devolvidos ao Dev pelo QA', color: T.warn, alert: true, miniViz: <MiniSparkline data={[{label:'S8',value:18},{value:20},{value:22},{value:25},{value:26},{label:'S13',value:28}]} color="#f5a524" />, onClick: () => openQAChart('bugs') },
+    { id: 'qa:evidence', value: '6', label: 'Evidências Pendentes', sub: 'dev não submeteu', disclaimer: 'bugs sem evidência de reprodução registrada', color: T.warn, miniViz: <MiniBarChart data={[{label:'S10',value:4},{label:'S11',value:7},{label:'S12',value:5},{label:'S13',value:6,current:true}]} showAvg={false} />, onClick: () => onNav('list') },
+  ]
+
   return (
     <>
       {qaChartModal}
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
-      <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
-        <KpiCard value={String(testing.length)} label="Aguardando Teste" sub="Ready for QA" disclaimer="itens em fila de QA ou em homologação ativa" miniViz={<MiniBarChart data={[{label:'S10',value:8},{label:'S11',value:10},{label:'S12',value:7},{label:'S13',value:testing.length,current:true}]} showAvg={false} />} onClick={() => onNav('list')} />
-        <KpiCard value={String(critAndHighBugs)} label="Bugs Críticos" sub={critAndHighBugs > 0 ? 'requer atenção' : 'tudo ok'} disclaimer="bugs P0/P1 bloqueando entrega da sprint" color={T.crit} alert={critAndHighBugs > 0} miniViz={<MiniSparkline data={[{label:'S8',value:9},{value:7},{value:8},{value:6},{value:5},{label:'S13',value:critAndHighBugs}]} color="#ef4444" />} onClick={() => openQAChart('bugs')} />
-        <KpiCard value="28%" label="Taxa de Rejeição" sub="meta: &lt;15%" disclaimer="% de itens devolvidos ao Dev pelo QA" color={T.warn} alert miniViz={<MiniSparkline data={[{label:'S8',value:18},{value:20},{value:22},{value:25},{value:26},{label:'S13',value:28}]} color="#f5a524" />} onClick={() => openQAChart('bugs')} />
-        <KpiCard value="6"   label="Evidências Pendentes" sub="dev não submeteu" disclaimer="bugs sem evidência de reprodução registrada" color={T.warn} miniViz={<MiniBarChart data={[{label:'S10',value:4},{label:'S11',value:7},{label:'S12',value:5},{label:'S13',value:6,current:true}]} showAvg={false} />} onClick={() => onNav('list')} />
-      </Grid>
+      <UnifiedMural dashId="qa" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
-      <div style={{ marginTop: 12 }}>
+      <div style={{ marginTop: 4 }}>
         <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
       </div>
 
@@ -1084,78 +1141,113 @@ function DashboardContent({ type, onNav, onInvite }: { type: DashboardType; onNa
   }
 }
 
-// ─── Add Card Modal ───────────────────────────────────────────────────────────
-function AddCardModal({ available, onAdd, onClose }: {
-  available: ReportEntry[]
-  onAdd: (cardId: string) => void
+// ─── Add Card Modal (reports + hidden native cards) ───────────────────────────
+function AddCardModal({ availableReports, hiddenNative, onAddReport, onRestoreNative, onClose }: {
+  availableReports: ReportEntry[]
+  hiddenNative: MuralNativeCard[]
+  onAddReport: (cardId: string) => void
+  onRestoreNative: (id: string) => void
   onClose: () => void
 }) {
   const [search, setSearch] = useState('')
-  const filtered = available.filter(r =>
-    r.title.toLowerCase().includes(search.toLowerCase()) ||
-    r.subtitle.toLowerCase().includes(search.toLowerCase())
+  const q = search.toLowerCase()
+  const filteredReports = availableReports.filter(r =>
+    r.title.toLowerCase().includes(q) || r.subtitle.toLowerCase().includes(q)
   )
+  const filteredNative = hiddenNative.filter(c => c.label.toLowerCase().includes(q))
+  const isEmpty = filteredReports.length === 0 && filteredNative.length === 0
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1300, backdropFilter: 'blur(2px)' }} />
       <div style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-        zIndex: 1301, width: 'min(720px, 95vw)', maxHeight: '82vh',
+        zIndex: 1301, width: 'min(720px, 95vw)', maxHeight: '84vh',
         background: T.bgSurface, border: `1px solid ${T.border2}`, borderRadius: 16,
         boxShadow: T.shadowModal, display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
-        {/* Header */}
         <div style={{ padding: '16px 20px 12px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: T.text1 }}>Adicionar card à Home</div>
-            <div style={{ fontSize: 12, color: T.text3, marginTop: 2 }}>Selecione relatórios do repositório para exibir na sua Home</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: T.text1 }}>Adicionar card ao mural</div>
+            <div style={{ fontSize: 12, color: T.text3, marginTop: 2 }}>Inclua relatórios ou restaure cards removidos</div>
           </div>
           <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 7, background: `${T.text3}14`, border: 'none', color: T.text2, cursor: 'pointer', fontSize: 18, lineHeight: '30px', textAlign: 'center' }}>×</button>
         </div>
-        {/* Search */}
         <div style={{ padding: '10px 20px', borderBottom: `1px solid ${T.border}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.bgPage, border: `1px solid ${T.border}`, borderRadius: 8, padding: '6px 12px' }}>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="5" cy="5" r="4" stroke={T.text3} strokeWidth="1.2"/><path d="M9 9l2 2" stroke={T.text3} strokeWidth="1.2" strokeLinecap="round"/></svg>
-            <input
-              autoFocus
-              value={search}
-              onChange={e => setSearch(e.target.value)}
+            <input autoFocus value={search} onChange={e => setSearch(e.target.value)}
               onKeyDown={e => e.key === 'Escape' && onClose()}
-              placeholder="Buscar relatório…"
-              style={{ background: 'none', border: 'none', outline: 'none', color: T.text1, fontSize: 13, flex: 1 }}
-            />
+              placeholder="Buscar card…"
+              style={{ background: 'none', border: 'none', outline: 'none', color: T.text1, fontSize: 13, flex: 1 }} />
           </div>
         </div>
-        {/* Card grid */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
-          {filtered.length === 0 ? (
+          {isEmpty ? (
             <div style={{ textAlign: 'center', padding: '36px 0', color: T.text3, fontSize: 13 }}>
-              {available.length === 0 ? 'Todos os relatórios já estão na sua Home.' : 'Nenhum relatório encontrado.'}
+              {availableReports.length === 0 && hiddenNative.length === 0
+                ? 'Todos os cards já estão no mural.'
+                : 'Nenhum card encontrado.'}
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
-              {filtered.map(r => (
-                <div key={r.id} style={{ background: T.bgPage, border: `1px solid ${T.border}`, borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ height: 80, overflow: 'hidden', borderBottom: `1px solid ${T.border}`, padding: '6px 8px', background: T.bgSurface }}>
-                    <r.Component variant="thumbnail" />
+            <>
+              {/* Removed native cards */}
+              {filteredNative.length > 0 && (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+                    Cards removidos
                   </div>
-                  <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: T.text1 }}>{r.title}</div>
-                    <div style={{ fontSize: 10, color: T.text3, marginTop: 2, marginBottom: 10, lineHeight: 1.4, flex: 1 }}>{r.subtitle}</div>
-                    <button
-                      onClick={() => onAdd(r.id)}
-                      style={{
-                        width: '100%', fontSize: 11, fontWeight: 600, color: '#fff',
-                        background: T.accent, border: 'none', borderRadius: 6, padding: '6px 0',
-                        cursor: 'pointer', transition: 'opacity 0.15s',
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {filteredNative.map(c => (
+                      <button key={c.id} onClick={() => onRestoreNative(c.id)} style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        fontSize: 12, color: T.text1, background: T.bgPage,
+                        border: `1px solid ${T.border}`, borderRadius: 8,
+                        padding: '7px 14px', cursor: 'pointer', transition: 'all 0.12s',
                       }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85' }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1' }}
-                    >+ Adicionar à Home</button>
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = T.accent; (e.currentTarget as HTMLButtonElement).style.color = T.accent }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = T.border; (e.currentTarget as HTMLButtonElement).style.color = T.text1 }}
+                      >
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                          <path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                        </svg>
+                        {c.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              ))}
-            </div>
+              )}
+              {/* Report cards */}
+              {filteredReports.length > 0 && (
+                <div>
+                  {filteredNative.length > 0 && (
+                    <div style={{ fontSize: 10, fontWeight: 700, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+                      Relatórios & Insights
+                    </div>
+                  )}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+                    {filteredReports.map(r => (
+                      <div key={r.id} style={{ background: T.bgPage, border: `1px solid ${T.border}`, borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ height: 80, overflow: 'hidden', borderBottom: `1px solid ${T.border}`, padding: '6px 8px', background: T.bgSurface }}>
+                          <r.Component variant="thumbnail" />
+                        </div>
+                        <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: T.text1 }}>{r.title}</div>
+                          <div style={{ fontSize: 10, color: T.text3, marginTop: 2, marginBottom: 10, lineHeight: 1.4, flex: 1 }}>{r.subtitle}</div>
+                          <button onClick={() => onAddReport(r.id)} style={{
+                            width: '100%', fontSize: 11, fontWeight: 600, color: '#fff',
+                            background: T.accent, border: 'none', borderRadius: 6, padding: '6px 0',
+                            cursor: 'pointer', transition: 'opacity 0.15s',
+                          }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85' }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1' }}
+                          >+ Adicionar ao mural</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -1238,103 +1330,113 @@ function ReportCardTile({ slot, onOpen, onDismiss }: {
   )
 }
 
-// ─── Assigned Report Cards section ───────────────────────────────────────────
-function AssignedReportCards({ dashId, tenantId, onNav }: { dashId: DashboardType; tenantId: string; onNav: (v: string) => void }) {
+// ─── Unified Home Mural ───────────────────────────────────────────────────────
+// Merges native KPI cards and assigned report cards into one dismissable grid.
+function UnifiedMural({ dashId, tenantId, nativeCards, onNav }: {
+  dashId: DashboardType
+  tenantId: string
+  nativeCards: MuralNativeCard[]
+  onNav: (v: string) => void
+}) {
   const { activeUser } = useSession()
-  const [openChartId,  setOpenChartId]  = useState<string | null>(null)
+  const [tick, setTick]                = useState(0)
+  const [openChartId, setOpenChartId]  = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
-  const [tick, setTick] = useState(0)
   void tick
 
-  const target  = dashId as AssignmentTarget
-  const visible = getVisibleHomeCards(tenantId, target, activeUser.user_id)
-  const visibleIds = new Set(visible.map(v => v.cardId))
-  const available  = REPORT_CARDS_LIST.filter(r => !visibleIds.has(r.id))
+  const dismissedNativeIds = getDismissedNative(activeUser.user_id, dashId)
+  const visibleNative = nativeCards.filter(c => !dismissedNativeIds.has(c.id))
+  const hiddenNative  = nativeCards.filter(c =>  dismissedNativeIds.has(c.id))
 
-  function handleDismiss(cardId: string) {
-    dismissHomeCard(activeUser.user_id, dashId, cardId)
-    setTick(t => t + 1)
+  const target       = dashId as AssignmentTarget
+  const reportSlots  = getVisibleHomeCards(tenantId, target, activeUser.user_id)
+  const reportVisIds = new Set(reportSlots.map(s => s.cardId))
+  const availReports = REPORT_CARDS_LIST.filter(r => !reportVisIds.has(r.id))
+
+  const totalCount = visibleNative.length + reportSlots.length
+  const canAdd     = availReports.length > 0 || hiddenNative.length > 0
+
+  function handleDismissNative(id: string) {
+    dismissNativeCard(activeUser.user_id, dashId, id); setTick(t => t + 1)
   }
-
-  function handlePin(cardId: string) {
-    pinHomeCard(activeUser.user_id, dashId, cardId)
-    setTick(t => t + 1)
-    setShowAddModal(false)
+  function handleRestoreNative(id: string) {
+    restoreNativeCard(activeUser.user_id, dashId, id); setTick(t => t + 1); setShowAddModal(false)
+  }
+  function handleDismissReport(cardId: string) {
+    dismissHomeCard(activeUser.user_id, dashId, cardId); setTick(t => t + 1)
+  }
+  function handleAddReport(cardId: string) {
+    pinHomeCard(activeUser.user_id, dashId, cardId); setTick(t => t + 1); setShowAddModal(false)
   }
 
   return (
     <>
-      {openChartId  && <ReportChartModal reportId={openChartId} onClose={() => setOpenChartId(null)} />}
-      {showAddModal && <AddCardModal available={available} onAdd={handlePin} onClose={() => setShowAddModal(false)} />}
+      {openChartId && <ReportChartModal reportId={openChartId} onClose={() => setOpenChartId(null)} />}
+      {showAddModal && (
+        <AddCardModal
+          availableReports={availReports}
+          hiddenNative={hiddenNative}
+          onAddReport={handleAddReport}
+          onRestoreNative={handleRestoreNative}
+          onClose={() => setShowAddModal(false)}
+        />
+      )}
 
-      <div style={{ marginTop: 28 }}>
-        {/* Section header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Relatórios & Insights
-          </span>
-          {visible.length > 0 && (
-            <span style={{
-              fontSize: 10, fontWeight: 700, color: T.accent,
-              background: T.accentDim, border: `1px solid ${T.accentBorder}`,
-              borderRadius: 99, padding: '1px 8px',
-            }}>{visible.length}</span>
-          )}
-
-          <button
-            onClick={() => setShowAddModal(true)}
-            disabled={available.length === 0}
-            style={{
-              fontSize: 11, color: T.accent, background: T.accentDim,
-              border: `1px solid ${T.accentBorder}`, borderRadius: 6,
-              padding: '4px 10px', cursor: available.length > 0 ? 'pointer' : 'not-allowed',
-              opacity: available.length > 0 ? 1 : 0.4,
-              display: 'flex', alignItems: 'center', gap: 4,
-            }}
-          >
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-            </svg>
-            Adicionar card
-          </button>
-
-          <button onClick={() => onNav('reports')} style={{
-            marginLeft: 'auto', fontSize: 11, color: T.accent,
-            background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-          }}>
-            Ver todos →
-          </button>
-        </div>
-
-        {/* Cards grid — reflows automatically (CSS grid auto-fit removes gaps) */}
-        {visible.length === 0 ? (
-          <div style={{
-            textAlign: 'center', padding: '28px 20px',
-            border: `1px dashed ${T.border}`, borderRadius: 10, color: T.text3, fontSize: 12,
-          }}>
-            Nenhum card ativo na Home.
-            {available.length > 0 && (
-              <button
-                onClick={() => setShowAddModal(true)}
-                style={{ marginLeft: 8, fontSize: 11, color: T.accent, background: 'none', border: 'none', cursor: 'pointer' }}
-              >
-                + Adicionar card
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="responsive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12, alignItems: 'stretch' }}>
-            {visible.map(slot => (
-              <ReportCardTile
-                key={slot.cardId}
-                slot={slot}
-                onOpen={setOpenChartId}
-                onDismiss={handleDismiss}
-              />
-            ))}
-          </div>
+      {/* Mural toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <button
+          onClick={() => setShowAddModal(true)}
+          disabled={!canAdd}
+          style={{
+            fontSize: 11, color: T.accent, background: T.accentDim,
+            border: `1px solid ${T.accentBorder}`, borderRadius: 6,
+            padding: '4px 10px', cursor: canAdd ? 'pointer' : 'not-allowed',
+            opacity: canAdd ? 1 : 0.4,
+            display: 'flex', alignItems: 'center', gap: 4,
+          }}
+        >
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+          </svg>
+          Adicionar card
+        </button>
+        {totalCount > 0 && (
+          <span style={{ fontSize: 10, color: T.text3 }}>{totalCount} card{totalCount !== 1 ? 's' : ''} no mural</span>
         )}
+        <button onClick={() => onNav('reports')} style={{
+          marginLeft: 'auto', fontSize: 11, color: T.accent,
+          background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+        }}>
+          Ver todos →
+        </button>
       </div>
+
+      {/* Unified grid */}
+      {totalCount === 0 ? (
+        <div style={{
+          textAlign: 'center', padding: '28px 20px',
+          border: `1px dashed ${T.border}`, borderRadius: 10, color: T.text3, fontSize: 12,
+        }}>
+          Mural vazio.{canAdd && (
+            <button onClick={() => setShowAddModal(true)} style={{ marginLeft: 8, fontSize: 11, color: T.accent, background: 'none', border: 'none', cursor: 'pointer' }}>
+              + Adicionar card
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="responsive-grid" style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+          gap: 12, alignItems: 'stretch', marginBottom: 20,
+        }}>
+          {visibleNative.map(card => (
+            <NativeMuralTile key={card.id} card={card} onDismiss={handleDismissNative} />
+          ))}
+          {reportSlots.map(slot => (
+            <ReportCardTile key={slot.cardId} slot={slot} onOpen={setOpenChartId} onDismiss={handleDismissReport} />
+          ))}
+        </div>
+      )}
     </>
   )
 }
@@ -1445,11 +1547,8 @@ export default function DashboardHomePage({ onNav, onInvite }: Props) {
         ))}
       </div>
 
-      {/* ── Dashboard content ───────────────────────────────────── */}
+      {/* ── Dashboard content (includes unified mural at top of each panel) ── */}
       <DashboardContent type={activeDashId} onNav={navigate} onInvite={onInvite} />
-
-      {/* ── Assigned report cards ───────────────────────────────── */}
-      <AssignedReportCards dashId={activeDashId} tenantId={MOCK_TENANT.tenant_id} onNav={navigate} />
     </div>
   )
 }

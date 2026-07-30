@@ -130,6 +130,23 @@ export interface HomeCardSlot {
   isUserPinned: boolean
 }
 
+// ─── Per-user native mural card dismissal ─────────────────────────────────────
+let _dismissedNative: Record<string, Set<string>> = {}  // key: `${userId}:${dashId}`
+
+export function dismissNativeCard(userId: string, dashId: string, cardId: string) {
+  const k = _prefKey(userId, dashId)
+  if (!_dismissedNative[k]) _dismissedNative[k] = new Set()
+  _dismissedNative[k].add(cardId)
+}
+
+export function restoreNativeCard(userId: string, dashId: string, cardId: string) {
+  _dismissedNative[_prefKey(userId, dashId)]?.delete(cardId)
+}
+
+export function getDismissedNative(userId: string, dashId: string): Set<string> {
+  return _dismissedNative[_prefKey(userId, dashId)] ?? new Set<string>()
+}
+
 export function getVisibleHomeCards(tenantId: string, dashId: AssignmentTarget, userId: string): HomeCardSlot[] {
   const assigned = getAssignedCards(tenantId, dashId)
   const k        = _prefKey(userId, dashId)
