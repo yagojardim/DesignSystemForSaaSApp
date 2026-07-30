@@ -101,3 +101,52 @@ export function upsertAssignment(
 export function removeAssignment(tenant_id: string, card_id: string): void {
   _assignments = _assignments.filter(a => !(a.tenant_id === tenant_id && a.card_id === card_id))
 }
+
+// ─── Per-user Home card preferences (session-persistent mock) ─────────────────
+// dismissed: admin-assigned cards the user hid from their Home
+// pinned:    cards the user added themselves beyond admin assignments
+let _dismissed: Record<string, Set<string>> = {}  // key: `${userId}:${dashId}`
+let _pinned:    Record<string, string[]>   = {}  // key: `${userId}:${dashId}`
+
+function _prefKey(userId: string, dashId: string) { return `${userId}:${dashId}` }
+
+export function dismissHomeCard(userId: string, dashId: string, cardId: string) {
+  const k = _prefKey(userId, dashId)
+  if (!_dismissed[k]) _dismissed[k] = new Set()
+  _dismissed[k].add(cardId)
+}
+
+export function pinHomeCard(userId: string, dashId: string, cardId: string) {
+  const k = _prefKey(userId, dashId)
+  if (!_pinned[k]) _pinned[k] = []
+  if (!_pinned[k].includes(cardId)) _pinned[k] = [..._pinned[k], cardId]
+  // Remove from dismissed in case it was there
+  _dismissed[k]?.delete(cardId)
+}
+
+export interface HomeCardSlot {
+  cardId:       string
+  cardTitle:    string
+  isUserPinned: boolean
+}
+
+export function getVisibleHomeCards(tenantId: string, dashId: AssignmentTarget, userId: string): HomeCardSlot[] {
+  const assigned = getAssignedCards(tenantId, dashId)
+  const k        = _prefKey(userId, dashId)
+  const dismissed = _dismissed[k] ?? new Set<string>()
+  const pinned    = _pinned[k] ?? []
+
+  // Admin-assigned, not dismissed
+  const result: HomeCardSlot[] = assigned
+    .filter(a => !dismissed.has(a.card_id))
+    .map(a => ({ cardId: a.card_id, cardTitle: a.card_title, isUserPinned: false }))
+
+  // User-pinned extras not in assigned list
+  const assignedIds = new Set(assigned.map(a => a.card_id))
+  for (const cardId of pinned) {
+    if (!assignedIds.has(cardId) && !dismissed.has(cardId)) {
+      result.push({ cardId, cardTitle: cardId, isUserPinned: true })
+    }
+  }
+  return result
+}

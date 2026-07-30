@@ -22,8 +22,14 @@ import {
   getAllForPo, getUnreadForPo, markReadByPo, markAllReadByPo,
   addPoReply, getSignalsForTenant, getUnreadCountForTenant, type ClientSignal,
 } from '../data/clientSignals'
-import { getAssignedCards, ASSIGNMENT_TARGETS, type AssignmentTarget } from '../data/dashboardAssignments'
-import { REPORT_REGISTRY, ReportChartModal, useChartModal } from '../data/reportRegistry'
+import {
+  dismissHomeCard, pinHomeCard, getVisibleHomeCards,
+  type AssignmentTarget, type HomeCardSlot,
+} from '../data/dashboardAssignments'
+import {
+  REPORT_REGISTRY, REPORT_CARDS_LIST, ReportChartModal, useChartModal,
+  type ReportEntry,
+} from '../data/reportRegistry'
 import { getBoardsForScope } from '../data/boards'
 import { countOperationalModules } from '../data/tenantModules'
 import { countPendingInvites, nearestExpiry } from '../data/invites'
@@ -1078,79 +1084,256 @@ function DashboardContent({ type, onNav, onInvite }: { type: DashboardType; onNa
   }
 }
 
+// ─── Add Card Modal ───────────────────────────────────────────────────────────
+function AddCardModal({ available, onAdd, onClose }: {
+  available: ReportEntry[]
+  onAdd: (cardId: string) => void
+  onClose: () => void
+}) {
+  const [search, setSearch] = useState('')
+  const filtered = available.filter(r =>
+    r.title.toLowerCase().includes(search.toLowerCase()) ||
+    r.subtitle.toLowerCase().includes(search.toLowerCase())
+  )
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1300, backdropFilter: 'blur(2px)' }} />
+      <div style={{
+        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+        zIndex: 1301, width: 'min(720px, 95vw)', maxHeight: '82vh',
+        background: T.bgSurface, border: `1px solid ${T.border2}`, borderRadius: 16,
+        boxShadow: T.shadowModal, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      }}>
+        {/* Header */}
+        <div style={{ padding: '16px 20px 12px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: T.text1 }}>Adicionar card à Home</div>
+            <div style={{ fontSize: 12, color: T.text3, marginTop: 2 }}>Selecione relatórios do repositório para exibir na sua Home</div>
+          </div>
+          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 7, background: `${T.text3}14`, border: 'none', color: T.text2, cursor: 'pointer', fontSize: 18, lineHeight: '30px', textAlign: 'center' }}>×</button>
+        </div>
+        {/* Search */}
+        <div style={{ padding: '10px 20px', borderBottom: `1px solid ${T.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.bgPage, border: `1px solid ${T.border}`, borderRadius: 8, padding: '6px 12px' }}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="5" cy="5" r="4" stroke={T.text3} strokeWidth="1.2"/><path d="M9 9l2 2" stroke={T.text3} strokeWidth="1.2" strokeLinecap="round"/></svg>
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => e.key === 'Escape' && onClose()}
+              placeholder="Buscar relatório…"
+              style={{ background: 'none', border: 'none', outline: 'none', color: T.text1, fontSize: 13, flex: 1 }}
+            />
+          </div>
+        </div>
+        {/* Card grid */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+          {filtered.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '36px 0', color: T.text3, fontSize: 13 }}>
+              {available.length === 0 ? 'Todos os relatórios já estão na sua Home.' : 'Nenhum relatório encontrado.'}
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+              {filtered.map(r => (
+                <div key={r.id} style={{ background: T.bgPage, border: `1px solid ${T.border}`, borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ height: 80, overflow: 'hidden', borderBottom: `1px solid ${T.border}`, padding: '6px 8px', background: T.bgSurface }}>
+                    <r.Component variant="thumbnail" />
+                  </div>
+                  <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: T.text1 }}>{r.title}</div>
+                    <div style={{ fontSize: 10, color: T.text3, marginTop: 2, marginBottom: 10, lineHeight: 1.4, flex: 1 }}>{r.subtitle}</div>
+                    <button
+                      onClick={() => onAdd(r.id)}
+                      style={{
+                        width: '100%', fontSize: 11, fontWeight: 600, color: '#fff',
+                        background: T.accent, border: 'none', borderRadius: 6, padding: '6px 0',
+                        cursor: 'pointer', transition: 'opacity 0.15s',
+                      }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85' }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1' }}
+                    >+ Adicionar à Home</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ─── Report card tile ─────────────────────────────────────────────────────────
+function ReportCardTile({ slot, onOpen, onDismiss }: {
+  slot: HomeCardSlot
+  onOpen: (cardId: string) => void
+  onDismiss: (cardId: string) => void
+}) {
+  const [hov, setHov] = useState(false)
+  const [xHov, setXHov] = useState(false)
+  const entry = REPORT_REGISTRY[slot.cardId]
+  return (
+    <div
+      onClick={() => onOpen(slot.cardId)}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        position: 'relative',
+        background: hov ? T.bgSurface2 : T.bgSurface,
+        borderTop:    `1px solid ${hov ? T.accent : T.border}`,
+        borderRight:  `1px solid ${hov ? T.accent : T.border}`,
+        borderBottom: `1px solid ${hov ? T.accent : T.border}`,
+        borderLeft:   `3px solid ${T.accent}`,
+        borderRadius: 10, padding: '14px 16px',
+        cursor: 'pointer', transition: 'all 0.15s',
+        display: 'flex', flexDirection: 'column', minWidth: 0,
+      }}
+    >
+      {/* Dismiss X */}
+      <button
+        onClick={e => { e.stopPropagation(); onDismiss(slot.cardId) }}
+        title="Remover da Home"
+        onMouseEnter={() => setXHov(true)}
+        onMouseLeave={() => setXHov(false)}
+        style={{
+          position: 'absolute', top: 8, right: 8, zIndex: 1,
+          width: 22, height: 22, borderRadius: 5, border: 'none',
+          background: xHov ? `${T.crit}22` : `${T.text3}18`,
+          color: xHov ? T.crit : T.text3,
+          cursor: 'pointer', fontSize: 15, lineHeight: '22px', textAlign: 'center',
+          transition: 'all 0.12s',
+        }}
+      >×</button>
+
+      {/* Title row */}
+      <div style={{ paddingRight: 28, marginBottom: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: T.text1 }}>{entry?.title ?? slot.cardId}</span>
+          {slot.isUserPinned && (
+            <span style={{ fontSize: 9, color: T.accent, background: T.accentDim, border: `1px solid ${T.accentBorder}`, borderRadius: 3, padding: '1px 5px', fontWeight: 600 }}>
+              📌 Meu
+            </span>
+          )}
+        </div>
+        {entry && <div style={{ fontSize: 10, color: T.text3, marginTop: 2 }}>{entry.subtitle}</div>}
+      </div>
+
+      {/* Thumbnail */}
+      {entry && (
+        <div style={{ height: 90, overflow: 'hidden', borderRadius: 8, background: T.bgPage, marginBottom: 10 }}>
+          <entry.Component variant="thumbnail" />
+        </div>
+      )}
+
+      {/* Open button */}
+      <button
+        onClick={e => { e.stopPropagation(); onOpen(slot.cardId) }}
+        style={{
+          alignSelf: 'flex-start', fontSize: 11, color: T.accent, background: T.accentDim,
+          border: `1px solid ${T.accentBorder}`, borderRadius: 5,
+          padding: '3px 9px', cursor: 'pointer',
+        }}
+      >Abrir →</button>
+    </div>
+  )
+}
+
 // ─── Assigned Report Cards section ───────────────────────────────────────────
 function AssignedReportCards({ dashId, tenantId, onNav }: { dashId: DashboardType; tenantId: string; onNav: (v: string) => void }) {
-  const [openChartId, setOpenChartId] = useState<string | null>(null)
-  const target   = dashId as AssignmentTarget
-  const assigned = getAssignedCards(tenantId, target)
-  if (assigned.length === 0) return null
+  const { activeUser } = useSession()
+  const [openChartId,  setOpenChartId]  = useState<string | null>(null)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [tick, setTick] = useState(0)
+  void tick
+
+  const target  = dashId as AssignmentTarget
+  const visible = getVisibleHomeCards(tenantId, target, activeUser.user_id)
+  const visibleIds = new Set(visible.map(v => v.cardId))
+  const available  = REPORT_CARDS_LIST.filter(r => !visibleIds.has(r.id))
+
+  function handleDismiss(cardId: string) {
+    dismissHomeCard(activeUser.user_id, dashId, cardId)
+    setTick(t => t + 1)
+  }
+
+  function handlePin(cardId: string) {
+    pinHomeCard(activeUser.user_id, dashId, cardId)
+    setTick(t => t + 1)
+    setShowAddModal(false)
+  }
 
   return (
     <>
-      {openChartId && <ReportChartModal reportId={openChartId} onClose={() => setOpenChartId(null)} />}
-      <div style={{ marginTop: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+      {openChartId  && <ReportChartModal reportId={openChartId} onClose={() => setOpenChartId(null)} />}
+      {showAddModal && <AddCardModal available={available} onAdd={handlePin} onClose={() => setShowAddModal(false)} />}
+
+      <div style={{ marginTop: 28 }}>
+        {/* Section header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Relatórios atribuídos a este dashboard
+            Relatórios & Insights
           </span>
-          <span style={{
-            fontSize: 10, fontWeight: 700, color: T.accent,
-            background: T.accentDim, border: `1px solid ${T.accentBorder}`,
-            borderRadius: 99, padding: '1px 8px',
-          }}>{assigned.length}</span>
+          {visible.length > 0 && (
+            <span style={{
+              fontSize: 10, fontWeight: 700, color: T.accent,
+              background: T.accentDim, border: `1px solid ${T.accentBorder}`,
+              borderRadius: 99, padding: '1px 8px',
+            }}>{visible.length}</span>
+          )}
+
+          <button
+            onClick={() => setShowAddModal(true)}
+            disabled={available.length === 0}
+            style={{
+              fontSize: 11, color: T.accent, background: T.accentDim,
+              border: `1px solid ${T.accentBorder}`, borderRadius: 6,
+              padding: '4px 10px', cursor: available.length > 0 ? 'pointer' : 'not-allowed',
+              opacity: available.length > 0 ? 1 : 0.4,
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            </svg>
+            Adicionar card
+          </button>
+
           <button onClick={() => onNav('reports')} style={{
             marginLeft: 'auto', fontSize: 11, color: T.accent,
             background: 'none', border: 'none', cursor: 'pointer', padding: 0,
           }}>
-            Ver todos os relatórios →
+            Ver todos →
           </button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
-          {assigned.map(a => {
-            const targetDef = ASSIGNMENT_TARGETS.find(t => t.id === target)
-            const entry     = REPORT_REGISTRY[a.card_id]
-            return (
-              <div
-                key={a.card_id}
-                onClick={() => setOpenChartId(a.card_id)}
-                style={{
-                  background: T.bgSurface, border: `1px solid ${T.border}`,
-                  borderRadius: 10, padding: '14px 16px',
-                  borderLeft: `3px solid ${T.accent}`,
-                  cursor: 'pointer', transition: 'border-color 0.15s',
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = T.accent }}
-                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = T.border }}
+
+        {/* Cards grid — reflows automatically (CSS grid auto-fit removes gaps) */}
+        {visible.length === 0 ? (
+          <div style={{
+            textAlign: 'center', padding: '28px 20px',
+            border: `1px dashed ${T.border}`, borderRadius: 10, color: T.text3, fontSize: 12,
+          }}>
+            Nenhum card ativo na Home.
+            {available.length > 0 && (
+              <button
+                onClick={() => setShowAddModal(true)}
+                style={{ marginLeft: 8, fontSize: 11, color: T.accent, background: 'none', border: 'none', cursor: 'pointer' }}
               >
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: T.text1, marginBottom: 3 }}>{a.card_title}</div>
-                    {entry && <div style={{ fontSize: 10, color: T.text3, marginBottom: 3 }}>{entry.subtitle}</div>}
-                    <div style={{ fontSize: 10, color: T.text3 }}>
-                      {targetDef?.icon} Atribuído a este dashboard
-                      {a.targets.length > 1 && ` + ${a.targets.length - 1} outro${a.targets.length > 2 ? 's' : ''}`}
-                    </div>
-                  </div>
-                  <button
-                    onClick={e => { e.stopPropagation(); setOpenChartId(a.card_id) }}
-                    style={{
-                      fontSize: 11, color: T.accent, background: T.accentDim,
-                      border: `1px solid ${T.accentBorder}`, borderRadius: 5,
-                      padding: '3px 9px', cursor: 'pointer', flexShrink: 0,
-                    }}
-                  >
-                    Abrir →
-                  </button>
-                </div>
-                {entry && (
-                  <div style={{ marginTop: 10, height: 96, overflow: 'hidden', borderRadius: 8, background: T.bgPage, flexShrink: 0 }}>
-                    <entry.Component variant="thumbnail" />
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
+                + Adicionar card
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="responsive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12, alignItems: 'stretch' }}>
+            {visible.map(slot => (
+              <ReportCardTile
+                key={slot.cardId}
+                slot={slot}
+                onOpen={setOpenChartId}
+                onDismiss={handleDismiss}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </>
   )

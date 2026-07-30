@@ -277,7 +277,7 @@ export function KpiCard({ value, label, sub, miniViz, disclaimer, color, alert, 
         <div style={{ fontSize: 22, fontWeight: 700, color: color ?? T.text1, lineHeight: 1 }}>{value}</div>
         <div style={{ fontSize: 11, color: T.text2, marginTop: 4 }}>{label}</div>
         {sub && <div style={{ fontSize: 10, color: T.text3, marginTop: 2, fontWeight: 500 }}>{sub}</div>}
-        {disclaimer && (
+        {disclaimer && hasMiniViz && (
           <div style={{
             marginTop: 'auto', paddingTop: 7,
             fontSize: 9, color: T.text3,

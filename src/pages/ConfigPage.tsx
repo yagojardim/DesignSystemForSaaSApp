@@ -712,7 +712,7 @@ export default function ConfigPage() {
               onClick={() => setActiveTab(tab.id)}
               style={{
                 display:'flex', alignItems:'center', gap:0, width:'100%', textAlign:'left',
-                padding:'10px 16px', border:'none', cursor:'pointer',
+                padding:'10px 16px', borderTop:'none', borderRight:'none', borderBottom:'none', cursor:'pointer',
                 background:'transparent',
                 color: isActive ? T.accent : T.text2,
                 fontWeight: isActive ? 600 : 400,
