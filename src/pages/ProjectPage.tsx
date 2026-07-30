@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { T as DS } from '../components/ds/tokens'
+import { getBoardById } from '../data/boards'
 import { CreateIssueModal } from '../components/CreateIssueModal'
 import { CompleteSprintModal } from '../components/CompleteSprintModal'
 import { useSession } from '../data/SessionContext'
@@ -1719,7 +1720,12 @@ function SprintsTab({ issues, sprints, onUpdateIssue }: {
 // ─── Page shell ───────────────────────────────────────────────────────────────
 type Tab = 'Board' | 'Backlog' | 'Sprints'
 
-export default function ProjectPage() {
+interface ProjectPageProps {
+  boardId?: string
+  onBackToBoards?: () => void
+}
+
+export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProps = {}) {
   const [tab, setTab]     = useState<Tab>('Board')
   const [issues, setIssues]   = useState<Issue[]>(INIT_ISSUES)
   const [sprints, setSprints] = useState<SprintDef[]>(SPRINTS)
@@ -1729,6 +1735,9 @@ export default function ProjectPage() {
 
   const { activeUser }    = useSession()
   const canManageSprint   = can(activeUser.permissions, 'sprint:manage')
+
+  const boardDef          = boardId ? getBoardById(boardId) : undefined
+  const isArchivedBoard   = boardDef?.status === 'archived'
 
   const activeSprint      = sprints.find(s => s.state === 'active')
   const activeSid         = activeSprint?.id ?? 's14'
@@ -1785,6 +1794,26 @@ export default function ProjectPage() {
 
   return (
     <>
+    {/* Board context bar — shown when opened from boards list */}
+    {boardDef && (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 20px', background: isArchivedBoard ? `${DS.warn}15` : `${DS.accent}12`, borderBottom: `1px solid ${isArchivedBoard ? DS.warn + '44' : DS.accent + '33'}`, flexShrink: 0 }}>
+        {onBackToBoards && (
+          <button onClick={onBackToBoards} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: DS.accent, fontSize: 12, padding: 0 }}>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M8 2.5L4 6.5l4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Boards
+          </button>
+        )}
+        {onBackToBoards && <span style={{ fontSize: 12, color: DS.accent + '66' }}>›</span>}
+        <svg width="13" height="13" viewBox="0 0 18 18" fill="none"><rect x="1" y="1" width="4" height="16" rx="1.5" fill={isArchivedBoard ? DS.warn : DS.accent} opacity="0.8"/><rect x="7" y="1" width="4" height="11" rx="1.5" fill={isArchivedBoard ? DS.warn : DS.accent} opacity="0.6"/><rect x="13" y="1" width="4" height="14" rx="1.5" fill={isArchivedBoard ? DS.warn : DS.accent} opacity="0.4"/></svg>
+        <span style={{ fontSize: 12, fontWeight: 600, color: isArchivedBoard ? DS.warn : DS.accent }}>{boardDef.name}</span>
+        <span style={{ fontSize: 11, color: DS.text3 }}>· {boardDef.project_name}</span>
+        {isArchivedBoard && (
+          <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: DS.warn, background: `${DS.warn}20`, border: `1px solid ${DS.warn}44`, borderRadius: 4, padding: '1px 7px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Arquivado — modo leitura
+          </span>
+        )}
+      </div>
+    )}
     <div className="flex flex-col h-full" style={{ background: S.bg }}>
       {/* Toolbar */}
       <div

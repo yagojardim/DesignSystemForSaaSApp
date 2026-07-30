@@ -46,7 +46,7 @@ const ALL_GROUPS: NavGroup[] = [
     label: 'Gestão',
     items: [
       { id: 'projects-list', label: 'Projetos & Tarefas', icon: ProjectIcon },
-      { id: 'project',       label: 'Kanban Board',       icon: BoardIcon   },
+      { id: 'boards-list',   label: 'Boards',             icon: BoardIcon   },
       { id: 'list',          label: 'Lista',              icon: ListIcon    },
       { id: 'gantt',         label: 'Gráfico Gantt',      icon: GanttIcon   },
       { id: 'timeline',      label: 'Timeline',           icon: TimelineIcon},
@@ -66,6 +66,7 @@ const ALL_GROUPS: NavGroup[] = [
     label: 'Configuração',
     items: [
       { id: 'config',        label: 'Configurações',        icon: ConfigIcon, cap: 'users:manage' },
+      { id: 'modules',       label: 'Módulos',              icon: ModulesIcon, cap: 'module:request' },
       { id: 'automations',   label: 'Automações',           icon: AutomIcon,  cap: 'users:manage' },
       { id: 'client-access',    label: 'Criar acesso cliente',    icon: AccessIcon, cap: 'access:client-portal' },
       { id: 'client',           label: 'Portal do Cliente',       icon: ClientIcon, cap: 'access:client-portal' },
@@ -85,16 +86,16 @@ const ALL_GROUPS: NavGroup[] = [
 
 // ─── Role → nav item ids map ──────────────────────────────────────────────────
 const ROLE_NAV_MAP: Record<RoleContext, string[]> = {
-  Admin:          ['home','my-tasks','calendar','projects-list','project','list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','config','automations','client-access','client','client-messages','team','login','client-login'],
-  PMO:            ['home','calendar','projects-list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','client','client-messages'],
-  ProjectManager: ['home','my-tasks','calendar','projects-list','project','list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','client','client-messages'],
-  ProductManager: ['home','calendar','projects-list','dashboard','epics','releases','reports','filters','navigator'],
-  ProductOwner:   ['home','my-tasks','calendar','projects-list','project','list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','client','client-access','client-messages'],
-  ScrumMaster:    ['home','my-tasks','calendar','projects-list','project','list','gantt','timeline','filters','navigator','reports','client-messages'],
-  TechLead:       ['home','my-tasks','calendar','projects-list','project','list','gantt','filters','navigator','reports','client-messages'],
-  Dev:            ['home','my-tasks','calendar','projects-list','project','list','filters','navigator','client-messages'],
-  UX:             ['home','my-tasks','calendar','projects-list','project','list','filters','navigator'],
-  QA:             ['home','my-tasks','calendar','projects-list','project','list','filters','navigator'],
+  Admin:          ['home','my-tasks','calendar','projects-list','boards-list','list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','config','modules','automations','client-access','client','client-messages','team','login','client-login'],
+  PMO:            ['home','calendar','projects-list','boards-list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','client','client-messages'],
+  ProjectManager: ['home','my-tasks','calendar','projects-list','boards-list','list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','modules','client','client-messages'],
+  ProductManager: ['home','calendar','projects-list','boards-list','dashboard','epics','releases','reports','filters','navigator'],
+  ProductOwner:   ['home','my-tasks','calendar','projects-list','boards-list','list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','client','client-access','client-messages'],
+  ScrumMaster:    ['home','my-tasks','calendar','projects-list','boards-list','list','gantt','timeline','filters','navigator','reports','client-messages'],
+  TechLead:       ['home','my-tasks','calendar','projects-list','boards-list','list','gantt','filters','navigator','reports','client-messages'],
+  Dev:            ['home','my-tasks','calendar','projects-list','boards-list','list','filters','navigator','client-messages'],
+  UX:             ['home','my-tasks','calendar','projects-list','boards-list','list','filters','navigator'],
+  QA:             ['home','my-tasks','calendar','projects-list','boards-list','list','filters','navigator'],
 }
 
 function ClockIcon()    { return <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.2"/><path d="M6.5 4v2.5l1.5 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg> }
@@ -703,6 +704,8 @@ function UserBlock({ collapsed }: { collapsed: boolean }) {
   )
 }
 
+function ApproveHoursIcon() { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.2"/><path d="M7 4.5v2.5l1.5 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M4.5 9.5l1.5 1.5 3-3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg> }
+
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 export function Sidebar({ collapsed, onToggle, activeNav, onNav }: SidebarProps) {
   const [projectsOpen, setProjectsOpen] = useState(_projectsOpen)
@@ -716,7 +719,8 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav }: SidebarProps)
   const { activeUser } = useSession()
   const permissions    = activeUser.permissions
   const groups         = getGroups(activeUser.role_context, permissions)
-  const canLogHours    = can(permissions, 'log:hours')
+  const canLogHours      = can(permissions, 'log:hours')
+  const canApproveHours  = can(permissions, 'approve:hours')
 
   const sidebarStyle: React.CSSProperties = {
     width: collapsed ? 56 : 240,
@@ -831,35 +835,57 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav }: SidebarProps)
         )}
       </nav>
 
-      {/* Lançar horas — only for roles with log:hours */}
-      {canLogHours && (
+      {/* Lançar horas / Aprovar horas */}
+      {(canLogHours || canApproveHours) && (
         <div className="flex-shrink-0 px-2 py-1.5" style={{ borderTop: `1px solid ${T.border}` }}>
-          {collapsed ? (
+          {canLogHours && (collapsed ? (
             <Tooltip label="Lançar horas" side="right">
               <button
-                onClick={() => {}}
+                onClick={() => onNav('timesheet')}
                 className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors"
-                style={{ color: T.text2 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${T.text3}14` }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                style={{ color: activeNav === 'timesheet' ? T.accent : T.text2, background: activeNav === 'timesheet' ? `${T.accent}14` : 'transparent' }}
+                onMouseEnter={e => { if (activeNav !== 'timesheet') (e.currentTarget as HTMLButtonElement).style.background = `${T.text3}14` }}
+                onMouseLeave={e => { if (activeNav !== 'timesheet') (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
               >
                 <ClockIcon />
               </button>
             </Tooltip>
           ) : (
             <button
-              onClick={() => {}}
+              onClick={() => onNav('timesheet')}
               className="flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] transition-colors"
-              style={{ color: T.text2 }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${T.text3}14` }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+              style={{ color: activeNav === 'timesheet' ? T.accent : T.text2, background: activeNav === 'timesheet' ? `${T.accent}14` : 'transparent' }}
+              onMouseEnter={e => { if (activeNav !== 'timesheet') (e.currentTarget as HTMLButtonElement).style.background = `${T.text3}14` }}
+              onMouseLeave={e => { if (activeNav !== 'timesheet') (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
             >
-              <span className="w-5 h-5 flex items-center justify-center rounded-md">
-                <ClockIcon />
-              </span>
+              <span className="w-5 h-5 flex items-center justify-center rounded-md"><ClockIcon /></span>
               <span>Lançar horas</span>
             </button>
-          )}
+          ))}
+          {canApproveHours && (collapsed ? (
+            <Tooltip label="Aprovar horas" side="right">
+              <button
+                onClick={() => onNav('hours-approval')}
+                className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors mt-0.5"
+                style={{ color: activeNav === 'hours-approval' ? T.accent : T.text2, background: activeNav === 'hours-approval' ? `${T.accent}14` : 'transparent' }}
+                onMouseEnter={e => { if (activeNav !== 'hours-approval') (e.currentTarget as HTMLButtonElement).style.background = `${T.text3}14` }}
+                onMouseLeave={e => { if (activeNav !== 'hours-approval') (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+              >
+                <ApproveHoursIcon />
+              </button>
+            </Tooltip>
+          ) : (
+            <button
+              onClick={() => onNav('hours-approval')}
+              className="flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] transition-colors mt-0.5"
+              style={{ color: activeNav === 'hours-approval' ? T.accent : T.text2, background: activeNav === 'hours-approval' ? `${T.accent}14` : 'transparent' }}
+              onMouseEnter={e => { if (activeNav !== 'hours-approval') (e.currentTarget as HTMLButtonElement).style.background = `${T.text3}14` }}
+              onMouseLeave={e => { if (activeNav !== 'hours-approval') (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+            >
+              <span className="w-5 h-5 flex items-center justify-center rounded-md"><ApproveHoursIcon /></span>
+              <span>Aprovar horas</span>
+            </button>
+          ))}
         </div>
       )}
 
@@ -895,5 +921,6 @@ function ChatIcon()    { return <svg width="14" height="14" viewBox="0 0 14 14" 
 function ReportsIcon()    { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 11V7M5 11V5M8 11V3M11 11V6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg> }
 function AutomIcon()      { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5l-5 7h5l-1 4 5-7H6l1-4z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg> }
 function ConfigIcon()     { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="2" stroke="currentColor" strokeWidth="1.2"/><path d="M7 1v2M7 11v2M1 7h2M11 7h2M2.9 2.9l1.4 1.4M9.7 9.7l1.4 1.4M9.7 4.3L11.1 2.9M2.9 11.1l1.4-1.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg> }
+function ModulesIcon()    { return <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1.5" y="1.5" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="7.5" y="1.5" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1.5" y="7.5" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="7.5" y="7.5" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg> }
 function CollapseIcon(){ return <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M8.5 2.5L5 6.5L8.5 10.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg> }
 function ExpandIcon()  { return <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M4.5 2.5L8 6.5L4.5 10.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg> }

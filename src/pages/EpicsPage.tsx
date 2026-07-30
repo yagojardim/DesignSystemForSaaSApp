@@ -1,15 +1,76 @@
 import { useState } from 'react'
 import { CreateIssueModal } from '../components/CreateIssueModal'
+import { WorkItemDetail, type WorkItemData } from '../components/WorkItemDetail'
 import { T } from '../components/ds/tokens'
 import {
-  ISSUES, EPICS, STATUS_CFG, TYPE_ICON, AV_COLOR,
-  type IssueStatus,
+  ISSUES, EPICS, SPRINTS, STATUS_CFG, TYPE_ICON, AV_COLOR,
+  type IssueStatus, type Issue,
 } from '../data/issues'
 
 const PRESET_COLORS = [T.accent, T.warn, T.purple, T.success, T.crit]
 
 const STATUSES: IssueStatus[] = ['backlog', 'todo', 'in-progress', 'in-review', 'done']
 
+// ─── Assignee name map (initials → display name) ──────────────────────────────
+const AV_NAME: Record<string, string> = {
+  AL: 'Ana Lima', NM: 'Natalia Moreira', JN: 'João Nunes',
+  CS: 'Camila Santos', RM: 'Rafael Mendes', LF: 'Lucas Ferreira',
+}
+
+// ─── Map Issue → WorkItemData for WorkItemDetail ──────────────────────────────
+function issueToWID(issue: Issue, allIssues: Issue[]): WorkItemData {
+  const epic = EPICS.find(e => e.id === issue.epic)
+  const sprint = SPRINTS.find(s => s.id === issue.sprint)
+  const children = allIssues
+    .filter(i => i.epic === issue.epic && i.key !== issue.key && i.type === 'subtask')
+    .map(i => ({ key: i.key, type: i.type, title: i.title, status: i.status, points: i.points, assigneeInitials: i.assignee }))
+
+  return {
+    key:              issue.key,
+    type:             issue.type,
+    title:            issue.title,
+    status:           issue.status,
+    priority:         issue.priority,
+    labels:           issue.labels,
+    assigneeInitials: issue.assignee,
+    assigneeName:     AV_NAME[issue.assignee],
+    epicKey:          epic?.key,
+    epicLabel:        epic?.label,
+    epicColor:        epic?.color,
+    sprintId:         issue.sprint,
+    sprintName:       sprint?.name,
+    blocked:          issue.blocked,
+    delayed:          issue.delayed,
+    dueDate:          issue.dueDateIso,
+    points:           issue.points,
+    children:         issue.type === 'story' || issue.type === 'epic' ? children : undefined,
+    availableEpics:   EPICS.map(e => ({ id: e.id, label: e.label, color: e.color })),
+    availableMembers: Object.keys(AV_NAME).map(k => ({ id: k, name: AV_NAME[k], initials: k })),
+    availableSprints: SPRINTS.map(s => ({ id: s.id, name: s.name })),
+    availableLabels:  ['Design', 'Eng', 'UX', 'Content', 'SEO', 'Mobile', 'Web', 'Research', 'Brand', 'Hero'],
+    createdAt:        '2025-04-01T09:00:00Z',
+    updatedAt:        new Date().toISOString(),
+  }
+}
+
+// ─── Map WorkItemData updates back to Issue fields ────────────────────────────
+function widToIssue(issue: Issue, updated: WorkItemData): Issue {
+  return {
+    ...issue,
+    title:    updated.title,
+    status:   updated.status as IssueStatus,
+    priority: updated.priority as Issue['priority'],
+    labels:   updated.labels,
+    assignee: updated.assigneeInitials,
+    points:   updated.points ?? issue.points,
+    blocked:  updated.blocked,
+    delayed:  updated.delayed,
+    epic:     updated.epicKey ?? issue.epic,
+    sprint:   updated.sprintId ?? issue.sprint,
+  }
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
 function DonutRing({ pct, size = 48, color }: { pct: number; size?: number; color: string }) {
   const r = (size - 6) / 2
   const circ = 2 * Math.PI * r
@@ -17,8 +78,7 @@ function DonutRing({ pct, size = 48, color }: { pct: number; size?: number; colo
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={T.border2} strokeWidth={5} />
-      <circle
-        cx={size / 2} cy={size / 2} r={r} fill="none"
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none"
         stroke={color} strokeWidth={5}
         strokeDasharray={`${dash} ${circ}`}
         strokeLinecap="round"
@@ -43,6 +103,7 @@ function Avatar({ initials, size = 26 }: { initials: string; size?: number }) {
   )
 }
 
+// ─── Main component ───────────────────────────────────────────────────────────
 export default function EpicsPage() {
   const [epicCreate, setEpicCreate] = useState(false)
   const [epicColors, setEpicColors] = useState<Record<string, string>>(
@@ -50,6 +111,18 @@ export default function EpicsPage() {
   )
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [pickerOpen, setPickerOpen] = useState<string | null>(null)
+
+  // Local mutable issue store so edits persist within session
+  const [issues, setIssues] = useState<Issue[]>([...ISSUES])
+
+  // WorkItemDetail drawer
+  const [detailKey, setDetailKey] = useState<string | null>(null)
+  const detailIssue = detailKey ? issues.find(i => i.key === detailKey) : null
+  const detailData = detailIssue ? issueToWID(detailIssue, issues) : null
+
+  function handleUpdate(updated: WorkItemData) {
+    setIssues(prev => prev.map(i => i.key === updated.key ? widToIssue(i, updated) : i))
+  }
 
   return (
     <>
@@ -64,7 +137,7 @@ export default function EpicsPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         {EPICS.map(epic => {
           const color = epicColors[epic.id] ?? epic.color
-          const epicIssues = ISSUES.filter(i => i.epic === epic.id)
+          const epicIssues = issues.filter(i => i.epic === epic.id)
           const done = epicIssues.filter(i => i.status === 'done').length
           const total = epicIssues.length
           const pct = total > 0 ? Math.round((done / total) * 100) : 0
@@ -83,7 +156,7 @@ export default function EpicsPage() {
               boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
               display: 'flex',
             }}>
-              {/* Left color bar */}
+              {/* Left color bar / color picker */}
               <div style={{ position: 'relative' }}>
                 <div
                   onClick={() => setPickerOpen(pickerOpen === epic.id ? null : epic.id)}
@@ -135,7 +208,6 @@ export default function EpicsPage() {
 
                 {/* Progress + stats row */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap', marginBottom: 16 }}>
-                  {/* Donut */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <DonutRing pct={pct} color={color} />
                     <div>
@@ -144,7 +216,6 @@ export default function EpicsPage() {
                     </div>
                   </div>
 
-                  {/* Status dots */}
                   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                     {STATUSES.map(s => {
                       const cnt = statusCounts[s] ?? 0
@@ -159,7 +230,6 @@ export default function EpicsPage() {
                     })}
                   </div>
 
-                  {/* Points */}
                   <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ fontSize: 11, color: T.text3 }}>Story points:</span>
                     <span style={{
@@ -181,7 +251,7 @@ export default function EpicsPage() {
                 <button
                   onClick={() => setExpanded(prev => ({ ...prev, [epic.id]: !prev[epic.id] }))}
                   style={{
-                    fontSize: 12, color: color, background: `${color}18`,
+                    fontSize: 12, color, background: `${color}18`,
                     border: `1px solid ${color}40`, borderRadius: 6, padding: '5px 14px',
                     cursor: 'pointer', fontWeight: 600,
                   }}
@@ -199,12 +269,25 @@ export default function EpicsPage() {
                         {epicIssues.map(issue => {
                           const ti = TYPE_ICON[issue.type]
                           const sc = STATUS_CFG[issue.status]
+                          const isActive = detailKey === issue.key
                           return (
-                            <div key={issue.key} style={{
-                              display: 'flex', alignItems: 'center', gap: 10,
-                              padding: '8px 10px', background: T.bgSurface2, borderRadius: 8,
-                              border: `1px solid ${T.border}`,
-                            }}>
+                            <div
+                              key={issue.key}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => setDetailKey(issue.key)}
+                              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailKey(issue.key) } }}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: 10,
+                                padding: '8px 10px', borderRadius: 8,
+                                background: isActive ? `${color}14` : T.bgSurface2,
+                                border: `1px solid ${isActive ? color + '60' : T.border}`,
+                                cursor: 'pointer', transition: 'all 0.12s',
+                                outline: 'none',
+                              }}
+                              onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = `${color}0A`; e.currentTarget.style.borderColor = `${color}40` }}
+                              onMouseLeave={e => { e.currentTarget.style.background = isActive ? `${color}14` : T.bgSurface2; e.currentTarget.style.borderColor = isActive ? `${color}60` : T.border }}
+                            >
                               <span style={{ color: ti.color, fontSize: 14, flexShrink: 0 }}>{ti.icon}</span>
                               <span style={{ fontSize: 11, color: T.text3, fontFamily: 'monospace', width: 62, flexShrink: 0 }}>{issue.key}</span>
                               <span style={{ fontSize: 13, color: T.text1, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -219,18 +302,25 @@ export default function EpicsPage() {
                                 fontSize: 11, color: T.text3, background: T.neutralDim,
                                 borderRadius: 4, padding: '1px 6px', flexShrink: 0,
                               }}>{issue.points}pt</span>
+                              {/* Open indicator */}
+                              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0, opacity: isActive ? 1 : 0.3, transition: 'opacity 0.12s' }}>
+                                <path d="M4 2.5l3.5 3.5L4 9.5" stroke={color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
                             </div>
                           )
                         })}
                       </div>
                     )}
                     {/* Add issue CTA */}
-                    <button style={{
-                      marginTop: 12, fontSize: 12, color: T.text3,
-                      background: 'transparent', border: `1px dashed ${T.border2}`,
-                      borderRadius: 8, padding: '8px 16px', cursor: 'pointer',
-                      width: '100%', textAlign: 'left',
-                    }}>
+                    <button
+                      onClick={e => { e.stopPropagation(); setEpicCreate(true) }}
+                      style={{
+                        marginTop: 12, fontSize: 12, color: T.text3,
+                        background: 'transparent', border: `1px dashed ${T.border2}`,
+                        borderRadius: 8, padding: '8px 16px', cursor: 'pointer',
+                        width: '100%', textAlign: 'left',
+                      }}
+                    >
                       + Criar issue neste épico
                     </button>
                   </div>
@@ -241,7 +331,18 @@ export default function EpicsPage() {
         })}
       </div>
     </div>
-    {epicCreate && <CreateIssueModal onClose={()=>setEpicCreate(false)} onCreate={()=>setEpicCreate(false)} />}
+
+    {/* WorkItemDetail drawer */}
+    {detailData && (
+      <WorkItemDetail
+        data={detailData}
+        mode="drawer"
+        onUpdate={handleUpdate}
+        onClose={() => setDetailKey(null)}
+      />
+    )}
+
+    {epicCreate && <CreateIssueModal onClose={() => setEpicCreate(false)} onCreate={() => setEpicCreate(false)} />}
     </>
   )
 }

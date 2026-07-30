@@ -29,6 +29,10 @@ import TeamPage from './pages/TeamPage'
 import MyTasksPage from './pages/MyTasksPage'
 import RoleDashboard from './pages/RoleDashboard'
 import ClientMessagesPage from './pages/ClientMessagesPage'
+import TimesheetPage from './pages/TimesheetPage'
+import HoursApprovalPage from './pages/HoursApprovalPage'
+import BoardsListPage from './pages/BoardsListPage'
+import ModulesPortfolioPage from './pages/ModulesPortfolioPage'
 import { MOCK_USERS } from './data/session'
 import InviteMemberModal from './components/InviteMemberModal'
 
@@ -38,6 +42,7 @@ const ALL_VIEWS: View[] = [
   'reports','automations','config','team','my-tasks',
   'issue','client','task-drawer',
   'login','role-dashboard','client-access','client-login','client-messages',
+  'timesheet','hours-approval','boards-list','modules',
 ]
 
 export const VIEW_LABELS: Record<View, string> = {
@@ -51,6 +56,9 @@ export const VIEW_LABELS: Record<View, string> = {
   login:'Login — Gestão', 'role-dashboard':'Dashboard por Papel',
   'client-access':'Criar Acesso de Cliente', 'client-login':'Login — Portal',
   'client-messages':'Mensagens do Cliente',
+  timesheet:'Lançar horas', 'hours-approval':'Aprovar horas',
+  'boards-list':'Boards',
+  modules:'Módulos',
 }
 
 export default function App() {
@@ -134,6 +142,7 @@ function AppInner() {
 function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void }) {
   const [createOpen, setCreate] = useState(false)
   const [inviteOpen, setInvite] = useState(false)
+  const [selectedBoardId, setSelectedBoardId] = useState<string | undefined>()
 
   return (
     <>
@@ -160,11 +169,15 @@ function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void })
         {view==='team'          && <div className="h-full overflow-y-auto dark-shell"><TeamPage onInvite={() => setInvite(true)} /></div>}
         {view==='my-tasks'      && <div className="h-full overflow-y-auto dark-shell"><MyTasksPage onNav={v => { if (ALL_VIEWS.includes(v as View)) setView(v as View) }} /></div>}
         {view==='dashboard'     && <div className="h-full overflow-y-auto dark-shell" style={{ background:'var(--bg-page,#0d1321)' }}><DashboardPage/></div>}
-        {view==='project'       && <div className="h-full overflow-hidden dark-shell"><ProjectPage/></div>}
+        {view==='project'       && <div className="h-full overflow-hidden dark-shell"><ProjectPage boardId={selectedBoardId} onBackToBoards={selectedBoardId ? () => setView('boards-list') : undefined} /></div>}
         {view==='issue'         && <div className="h-full overflow-hidden dark-shell"><IssueDetailPage/></div>}
         {view==='task-drawer'   && <div className="h-full overflow-hidden dark-shell"><TaskDrawerPage/></div>}
         {view==='role-dashboard'    && <div className="h-full dark-shell"><RoleDashboard onBack={() => setView('home')} /></div>}
         {view==='client-messages'  && <div className="h-full overflow-hidden dark-shell"><ClientMessagesPage /></div>}
+        {view==='timesheet'        && <div className="h-full overflow-y-auto dark-shell"><TimesheetPage /></div>}
+        {view==='hours-approval'   && <div className="h-full overflow-y-auto dark-shell"><HoursApprovalPage /></div>}
+        {view==='boards-list'      && <div className="h-full overflow-y-auto dark-shell"><BoardsListPage onSelectBoard={id => { setSelectedBoardId(id); setView('project') }} /></div>}
+        {view==='modules'          && <div className="h-full overflow-y-auto dark-shell"><ModulesPortfolioPage onNav={v => { if (ALL_VIEWS.includes(v as View)) setView(v as View) }} /></div>}
       </Shell>
     </>
   )

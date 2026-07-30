@@ -3,6 +3,7 @@ import { T } from '../components/ds/tokens'
 import { generateTempPassword } from '../data/security'
 import { createClientAccess } from '../data/clientAccess'
 import { MOCK_TENANT } from '../data/session'
+import { copyToClipboard } from '../utils/copyToClipboard'
 
 interface Props {
   onBack: () => void
@@ -27,6 +28,7 @@ export default function ClientAccessPage({ onBack }: Props) {
   const [generatedPwd, setGeneratedPwd] = useState('')
   const [copied, setCopied] = useState(false)
   const [pwdCopied, setPwdCopied] = useState(false)
+  const [copyErr, setCopyErr] = useState('')
 
   useEffect(() => {
     if (done) {
@@ -69,16 +71,16 @@ export default function ClientAccessPage({ onBack }: Props) {
     setPwdCopied(false)
   }
 
-  function copyUrl() {
-    navigator.clipboard.writeText(generatedUrl).catch(() => {})
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  async function copyUrl() {
+    const ok = await copyToClipboard(generatedUrl)
+    if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000) }
+    else { setCopyErr('Não foi possível copiar a URL. Selecione e copie manualmente.'); setTimeout(() => setCopyErr(''), 4000) }
   }
 
-  function copyPwd() {
-    navigator.clipboard.writeText(generatedPwd).catch(() => {})
-    setPwdCopied(true)
-    setTimeout(() => setPwdCopied(false), 2000)
+  async function copyPwd() {
+    const ok = await copyToClipboard(generatedPwd)
+    if (ok) { setPwdCopied(true); setTimeout(() => setPwdCopied(false), 2000) }
+    else { setCopyErr('Não foi possível copiar a senha. Selecione e copie manualmente.'); setTimeout(() => setCopyErr(''), 4000) }
   }
 
   const selectedProjectObjs = PROJECTS.filter(p => selectedProjects.includes(p.id))
@@ -201,6 +203,11 @@ export default function ClientAccessPage({ onBack }: Props) {
                   ⚠ Copie agora. O cliente deverá alterar no primeiro acesso. Após sair desta tela, a senha não será reexibida.
                   <span style={{ color: T.text3, display: 'block', marginTop: 4 }}>Inspection Mode — senha demonstrativa, sem hash real.</span>
                 </div>
+                {copyErr && (
+                  <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 7, background: `${T.crit}14`, border: `1px solid ${T.crit}50`, fontSize: 11, color: T.crit }}>
+                    ✗ {copyErr}
+                  </div>
+                )}
               </div>
             )}
 

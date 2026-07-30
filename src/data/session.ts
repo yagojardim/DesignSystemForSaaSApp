@@ -57,6 +57,7 @@ export interface MockUser {
   permissions: string[]
   assigned_dashboards: UserDashboard[]
   password_must_change?: boolean
+  approved_squads?: string[]
 }
 
 // ─── Catalog of all 10 dashboards ────────────────────────────────────────────
@@ -109,6 +110,7 @@ export const MOCK_USERS: MockUser[] = [
     modules_enabled: ['board','reports','portfolio','roadmap','config','team','modules','audit'],
     permissions: ['*'],
     assigned_dashboards: [ud('u_admin', 'admin', true)],
+    approved_squads: ['squad_growth', 'squad_platform', 'squad_design'],
   },
   {
     user_id: 'u_pmo',
@@ -135,8 +137,9 @@ export const MOCK_USERS: MockUser[] = [
     project_id: 'proj_001',
     squad_id: 'squad_growth',
     modules_enabled: ['board','reports','roadmap','releases'],
-    permissions: derivePermissions('ProjectManager'),
+    permissions: derivePermissions('ProjectManager', ['approve:hours']),
     assigned_dashboards: [ud('u_pm', 'project-manager', true)],
+    approved_squads: ['squad_growth'],
   },
   {
     user_id: 'u_prodmgr',
@@ -302,6 +305,11 @@ export function getActiveUser(): MockUser {
 // ─── Invite flow (mock): adds a new user to the in-memory list ────────────────
 export function addMockUser(user: MockUser): void {
   MOCK_USERS.push(user)
+}
+
+export function updateApprovedSquads(user_id: string, squads: string[]): void {
+  const u = MOCK_USERS.find(u => u.user_id === user_id)
+  if (u) u.approved_squads = squads
 }
 
 export function deactivateMockUser(user_id: string): void {

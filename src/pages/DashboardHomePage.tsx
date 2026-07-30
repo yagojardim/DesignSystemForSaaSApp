@@ -23,6 +23,8 @@ import {
 } from '../data/clientSignals'
 import { getAssignedCards, ASSIGNMENT_TARGETS, type AssignmentTarget } from '../data/dashboardAssignments'
 import { REPORT_REGISTRY, ReportChartModal, useChartModal } from '../data/reportRegistry'
+import { getBoardsForScope } from '../data/boards'
+import { countOperationalModules } from '../data/tenantModules'
 
 // ─── Shared hook: drawer + nav + filter state ─────────────────────────────────
 function useDrawer() {
@@ -64,6 +66,11 @@ function ColSpan({ children }: { children: ReactNode }) {
 // ─── 1. ADMIN MASTER ─────────────────────────────────────────────────────────
 function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?: () => void }) {
   const [filters, setFilters] = useFilters()
+  const { activeUser } = useSession()
+  const _scope = getActiveScope()
+  const _boards = getBoardsForScope(_scope.projects_allowed, activeUser.tenant_id)
+  const _activeBoards = _boards.filter(b => b.status === 'active').length
+  const _modCounts = countOperationalModules(activeUser.tenant_id)
 
   const modules = [
     { name: 'Board & Sprint',   active: true,  users: 9 },
@@ -93,8 +100,8 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
       <Grid cols="repeat(6,1fr)">
         <KpiCard value="11" label="Usuários" sub="9 ativos" onClick={() => onNav('team')} />
         <KpiCard value="3"  label="Projetos" sub="2 ativos" onClick={() => onNav('projects-list')} />
-        <KpiCard value="5"  label="Boards"   sub="4 ativos" onClick={() => onNav('project')} />
-        <KpiCard value="3"  label="Módulos ativos" sub="de 6" onClick={() => onNav('config')} />
+        <KpiCard value={String(_boards.length)} label="Boards" sub={`${_activeBoards} ativo${_activeBoards !== 1 ? 's' : ''}`} onClick={() => onNav('boards-list')} />
+        <KpiCard value={String(_modCounts.active)} label="Módulos ativos" sub={`de ${_modCounts.total}`} onClick={() => onNav('modules')} />
         <KpiCard value="1"  label="Bloqueados" sub="João Prado" color={T.crit} alert onClick={() => onNav('team')} />
         <KpiCard value="2"  label="Convites" sub="expiram em 7d" color={T.warn} onClick={() => onNav('team')} />
       </Grid>

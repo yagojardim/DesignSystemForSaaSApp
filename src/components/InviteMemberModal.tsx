@@ -6,6 +6,7 @@ import {
   capabilityVisibility, STEP4_CAPABILITIES, type Capability,
 } from '../data/permissions'
 import { generateTempPassword, markPasswordMustChange } from '../data/security'
+import { copyToClipboard } from '../utils/copyToClipboard'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const AVATAR_COLORS = ['#3B82F6','#10B981','#F59E0B','#EF4444','#6366F1','#A78BFA','#34d399','#f5a524','#e879f9','#60a5fa']
@@ -100,7 +101,6 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
   const [fullName, setFullName]   = useState('')
   const [email, setEmail]         = useState('')
   const [phone, setPhone]         = useState('')
-  const [title, setTitle]         = useState('')
   const [lang, setLang]           = useState('pt-BR')
   const [avatarColor, setAvatarColor] = useState(AVATAR_COLORS[0])
 
@@ -113,6 +113,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
 
   // Step 4 — conditional opt-ins
   const [optIns, setOptIns] = useState<Set<Capability>>(new Set())
+  const [approvedSquads, setApprovedSquads] = useState<string[]>([])
 
   // Step 5 — links
   const [projects, setProjects] = useState<string[]>(['proj_001'])
@@ -125,6 +126,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
   // Step 6 (confirmation) — generated password shown once
   const [generatedPwd, setGeneratedPwd] = useState('')
   const [pwdCopied, setPwdCopied] = useState(false)
+  const [pwdCopyErr, setPwdCopyErr] = useState('')
 
   // ── Auto-configure on role select ──────────────────────────────────────────
   function selectRole(r: RoleContext) {
@@ -201,6 +203,8 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
 
     const pwd = generateTempPassword()
 
+    const hasApproveHours = capabilityVisibility(role, 'approve:hours') === 'on' || optIns.has('approve:hours' as Capability)
+
     const user: MockUser = {
       user_id: newId,
       tenant_id: MOCK_TENANT.tenant_id,
@@ -215,6 +219,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
       permissions: derivePermissions(role, [...optIns]),
       assigned_dashboards: dashes,
       password_must_change: true,
+      approved_squads: hasApproveHours ? approvedSquads : undefined,
     }
 
     addMockUser(user)
@@ -229,10 +234,10 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
     onClose()
   }
 
-  function copyPwd() {
-    navigator.clipboard.writeText(generatedPwd).catch(() => {})
-    setPwdCopied(true)
-    setTimeout(() => setPwdCopied(false), 2000)
+  async function copyPwd() {
+    const ok = await copyToClipboard(generatedPwd)
+    if (ok) { setPwdCopied(true); setTimeout(() => setPwdCopied(false), 2000) }
+    else { setPwdCopyErr('Não foi possível copiar. Selecione e copie manualmente.'); setTimeout(() => setPwdCopyErr(''), 4000) }
   }
 
   const compatibleDashes = role ? getCompatibleDashboards(role) : []
@@ -319,9 +324,6 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
                 <Field label="Telefone (opcional)">
                   <input style={inputStyle} value={phone} onChange={e => setPhone(e.target.value)} placeholder="+55 11 99999-9999" />
                 </Field>
-                <Field label="Cargo / título">
-                  <input style={inputStyle} value={title} onChange={e => setTitle(e.target.value)} placeholder="Ex.: Engenheiro Sênior" />
-                </Field>
                 <Field label="Idioma">
                   <select style={{ ...inputStyle, cursor: 'pointer' }} value={lang} onChange={e => setLang(e.target.value)}>
                     <option value="pt-BR">Português (BR)</option>
@@ -337,7 +339,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
           {step === 1 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ fontSize: 12, color: T.text2, marginBottom: 8 }}>
-                Selecione a função operacional. Admin Master não é convidável — é criado por seed e transferível.
+                Selecione a função operacional do usuário.
               </div>
               {INVITABLE_ROLES.map(({ role: r, label, desc }) => (
                 <button key={r} onClick={() => selectRole(r)} style={{
@@ -503,8 +505,40 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
                 )
               })()}
 
+              {/* Squads que aprova — visible when approve:hours is on or opted-in */}
+              {(() => {
+                const vis = capabilityVisibility(role, 'approve:hours')
+                const hasApprove = vis === 'on' || (vis !== 'hidden' && optIns.has('approve:hours' as Capability))
+                if (!hasApprove) return null
+                return (
+                  <div style={{ padding: '14px 15px', borderRadius: 9, background: `${T.accent}06`, border: `1px solid ${T.accent}30` }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: T.text1, marginBottom: 4 }}>Squads que aprova</div>
+                    <div style={{ fontSize: 11, color: T.text3, marginBottom: 10 }}>Selecione os squads cujos lançamentos este usuário poderá revisar. Pode ser alterado depois.</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {SQUADS.map(s => {
+                        const on = approvedSquads.includes(s.id)
+                        return (
+                          <button key={s.id} onClick={() => setApprovedSquads(prev => on ? prev.filter(x => x !== s.id) : [...prev, s.id])} style={{
+                            display: 'flex', alignItems: 'center', gap: 10, padding: '8px 11px', borderRadius: 7, cursor: 'pointer',
+                            background: on ? `${T.accent}14` : T.bgPage,
+                            border: `1px solid ${on ? T.accent : T.border}`,
+                            transition: 'all 0.15s',
+                          }}>
+                            <div style={{ width: 15, height: 15, borderRadius: 4, flexShrink: 0, background: on ? T.accent : T.border2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              {on && <span style={{ color: '#fff', fontSize: 9 }}>✓</span>}
+                            </div>
+                            <span style={{ fontSize: 12, color: T.text1 }}>{s.name}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })()}
+
               {STEP4_CAPABILITIES.every(({ cap }) => capabilityVisibility(role, cap) === 'hidden') &&
-               capabilityVisibility(role, 'log:hours') === 'hidden' && (
+               capabilityVisibility(role, 'log:hours') === 'hidden' &&
+               capabilityVisibility(role, 'approve:hours') === 'hidden' && (
                 <div style={{ padding: '16px', textAlign: 'center', color: T.text3, fontSize: 12 }}>
                   Nenhuma permissão condicional disponível para este papel.
                 </div>
@@ -688,6 +722,12 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
                   </button>
                 </div>
               </div>
+
+              {pwdCopyErr && (
+                <div style={{ padding: '8px 12px', borderRadius: 7, background: `${T.crit}14`, border: `1px solid ${T.crit}50`, fontSize: 11, color: T.crit }}>
+                  ✗ {pwdCopyErr}
+                </div>
+              )}
 
               {/* Warning */}
               <div style={{
