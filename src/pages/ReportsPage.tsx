@@ -46,22 +46,22 @@ function AssignPopover({ card, anchorRef, onClose, onSaved }: AssignPopoverProps
   const tid   = MOCK_TENANT.tenant_id
   const user  = getActiveUser()
   const existing = getAssignment(tid, card.id)
-  const [selected, setSelected] = useState<Set<AssignmentTarget>>(
-    new Set(existing?.targets ?? [])
+
+  // Map<target, slot> — tracks both which targets are checked and which slot they use
+  const [selected, setSelected] = useState<Map<AssignmentTarget, 'mural' | 'grid'>>(
+    new Map((existing?.targets ?? []).map(t => [t, existing?.slots?.[t] ?? 'mural']))
   )
   const [query, setQuery] = useState('')
   const popoverRef = useRef<HTMLDivElement>(null)
 
-  // Position anchored to card button
   const [pos, setPos] = useState({ top: 0, left: 0 })
   useEffect(() => {
     if (anchorRef.current) {
       const r = anchorRef.current.getBoundingClientRect()
-      setPos({ top: r.bottom + 6, left: Math.max(8, r.left - 260) })
+      setPos({ top: r.bottom + 6, left: Math.max(8, r.left - 280) })
     }
   }, [anchorRef])
 
-  // Close on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) onClose()
@@ -72,18 +72,25 @@ function AssignPopover({ card, anchorRef, onClose, onSaved }: AssignPopoverProps
 
   function toggle(id: AssignmentTarget) {
     setSelected(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
+      const next = new Map(prev)
+      if (next.has(id)) next.delete(id)
+      else next.set(id, 'mural')
       return next
     })
   }
 
+  function setSlot(id: AssignmentTarget, slot: 'mural' | 'grid') {
+    setSelected(prev => { const next = new Map(prev); next.set(id, slot); return next })
+  }
+
   function save() {
-    const targets = [...selected]
+    const targets = [...selected.keys()]
+    const slots: Partial<Record<AssignmentTarget, 'mural' | 'grid'>> = {}
+    selected.forEach((slot, target) => { slots[target] = slot })
     if (targets.length === 0) {
       removeAssignment(tid, card.id)
     } else {
-      upsertAssignment(tid, card.id, card.title, targets, user.user_id)
+      upsertAssignment(tid, card.id, card.title, targets, user.user_id, slots)
     }
     onSaved(targets.length)
     onClose()
@@ -105,7 +112,7 @@ function AssignPopover({ card, anchorRef, onClose, onSaved }: AssignPopoverProps
     <div ref={popoverRef} style={{
       position: 'fixed', zIndex: 1200,
       top: pos.top, left: pos.left,
-      width: 300, background: T.bgSurface, border: `1px solid ${T.border}`,
+      width: 320, background: T.bgSurface, border: `1px solid ${T.border}`,
       borderRadius: 12, boxShadow: T.shadowModal, overflow: 'hidden',
     }}>
       {/* Header */}
@@ -126,7 +133,7 @@ function AssignPopover({ card, anchorRef, onClose, onSaved }: AssignPopoverProps
       </div>
 
       {/* List */}
-      <div style={{ maxHeight: 260, overflowY: 'auto', padding: '8px 0' }}>
+      <div style={{ maxHeight: 300, overflowY: 'auto', padding: '8px 0' }}>
         {grouped.map(({ group, targets }) => targets.length === 0 ? null : (
           <div key={group}>
             <div style={{ fontSize: 10, fontWeight: 700, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.07em', padding: '6px 14px 3px' }}>
@@ -134,21 +141,45 @@ function AssignPopover({ card, anchorRef, onClose, onSaved }: AssignPopoverProps
             </div>
             {targets.map(t => {
               const checked = selected.has(t.id)
+              const slot    = selected.get(t.id) ?? 'mural'
               return (
-                <label key={t.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px',
-                  cursor: 'pointer', background: checked ? `${T.accent}10` : 'transparent',
-                  transition: 'background 0.1s',
-                }}>
-                  <input
-                    type="checkbox" checked={checked} onChange={() => toggle(t.id)}
-                    style={{ accentColor: T.accent, width: 14, height: 14, flexShrink: 0 }}
-                  />
-                  <span style={{ fontSize: 14, flexShrink: 0 }}>{t.icon}</span>
-                  <span style={{ fontSize: 12, color: checked ? T.text1 : T.text2, fontWeight: checked ? 600 : 400 }}>
-                    {t.label}
-                  </span>
-                </label>
+                <div key={t.id}>
+                  <label style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px',
+                    cursor: 'pointer', background: checked ? `${T.accent}10` : 'transparent',
+                    transition: 'background 0.1s',
+                  }}>
+                    <input
+                      type="checkbox" checked={checked} onChange={() => toggle(t.id)}
+                      style={{ accentColor: T.accent, width: 14, height: 14, flexShrink: 0 }}
+                    />
+                    <span style={{ fontSize: 14, flexShrink: 0 }}>{t.icon}</span>
+                    <span style={{ fontSize: 12, color: checked ? T.text1 : T.text2, fontWeight: checked ? 600 : 400, flex: 1 }}>
+                      {t.label}
+                    </span>
+                  </label>
+                  {/* Slot selector — only shown when target is checked */}
+                  {checked && (
+                    <div style={{ display: 'flex', gap: 4, padding: '0 14px 8px 38px' }}>
+                      {(['mural', 'grid'] as const).map(s => (
+                        <button
+                          key={s}
+                          onClick={e => { e.stopPropagation(); setSlot(t.id, s) }}
+                          style={{
+                            fontSize: 10, fontWeight: slot === s ? 700 : 400,
+                            padding: '3px 10px', borderRadius: 4, cursor: 'pointer',
+                            background: slot === s ? T.accent : T.bgSurface2,
+                            color:      slot === s ? '#fff'   : T.text3,
+                            border: `1px solid ${slot === s ? T.accent : T.border}`,
+                            transition: 'all 0.1s',
+                          }}
+                        >
+                          {s === 'mural' ? 'Mural' : 'Grade'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )
             })}
           </div>

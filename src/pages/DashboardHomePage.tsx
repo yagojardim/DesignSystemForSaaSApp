@@ -23,7 +23,8 @@ import {
   addPoReply, getSignalsForTenant, getUnreadCountForTenant, type ClientSignal,
 } from '../data/clientSignals'
 import {
-  dismissHomeCard, pinHomeCard, getVisibleHomeCards,
+  dismissHomeCard, pinHomeCard, getVisibleHomeCards, getGridCards,
+  pinGridCard, dismissGridCard,
   dismissNativeCard, restoreNativeCard, getDismissedNative,
   type AssignmentTarget, type HomeCardSlot,
 } from '../data/dashboardAssignments'
@@ -241,6 +242,7 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
             <AuditFeed entries={auditEntries} />
           </SCard>
         </ColSpan>
+        <CompositionGrid dashId="admin" tenantId={MOCK_TENANT.tenant_id} selProj={selProj} />
       </Grid>
     </>
   )
@@ -299,6 +301,7 @@ function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
         <ColSpan>
           <ClientFeedCard tenantId={MOCK_TENANT.tenant_id} />
         </ColSpan>
+        <CompositionGrid dashId="pmo" tenantId={MOCK_TENANT.tenant_id} selProj={selProj} />
       </Grid>
     </>
   )
@@ -376,6 +379,7 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
         <ColSpan>
           <ClientFeedCard tenantId={MOCK_TENANT.tenant_id} />
         </ColSpan>
+        <CompositionGrid dashId="project-manager" tenantId={MOCK_TENANT.tenant_id} selProj={selProj} />
       </Grid>
     </>
   )
@@ -466,6 +470,7 @@ function ProductManagerPanel({ onNav }: { onNav: (v: string) => void }) {
             </div>
           </SCard>
         </ColSpan>
+        <CompositionGrid dashId="product-manager" tenantId={MOCK_TENANT.tenant_id} selProj={selProj} />
       </Grid>
     </>
   )
@@ -741,6 +746,7 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
             </div>
           </SCard>
         </div>
+        <CompositionGrid dashId="product-owner" tenantId={MOCK_TENANT.tenant_id} selProj={selProj} />
       </Grid>
     </>
   )
@@ -838,6 +844,7 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
         <ColSpan>
           <ClientFeedCard tenantId={MOCK_TENANT.tenant_id} />
         </ColSpan>
+        <CompositionGrid dashId="scrum-master" tenantId={MOCK_TENANT.tenant_id} selProj={selProj} />
       </Grid>
     </>
   )
@@ -920,6 +927,7 @@ function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
         <ColSpan>
           <ClientFeedCard tenantId={MOCK_TENANT.tenant_id} />
         </ColSpan>
+        <CompositionGrid dashId="tech-lead" tenantId={MOCK_TENANT.tenant_id} selProj={selProj} />
       </Grid>
     </>
   )
@@ -977,6 +985,7 @@ function DevPanel({ onNav }: { onNav: (v: string) => void }) {
         <ColSpan>
           <ClientFeedCard tenantId={MOCK_TENANT.tenant_id} />
         </ColSpan>
+        <CompositionGrid dashId="dev" tenantId={MOCK_TENANT.tenant_id} selProj={selProj} />
       </Grid>
     </>
   )
@@ -1050,6 +1059,7 @@ function UxPanel({ onNav }: { onNav: (v: string) => void }) {
             }
           </SCard>
         </div>
+        <CompositionGrid dashId="ux" tenantId={MOCK_TENANT.tenant_id} selProj={selProj} />
       </Grid>
     </>
   )
@@ -1128,6 +1138,7 @@ function QaPanel({ onNav }: { onNav: (v: string) => void }) {
             ))}
           </SCard>
         </div>
+        <CompositionGrid dashId="qa" tenantId={MOCK_TENANT.tenant_id} selProj={selProj} />
       </Grid>
     </>
   )
@@ -1150,12 +1161,13 @@ function DashboardContent({ type, onNav, onInvite }: { type: DashboardType; onNa
 }
 
 // ─── Add Card Modal (reports + hidden native cards) ───────────────────────────
-function AddCardModal({ availableReports, hiddenNative, onAddReport, onRestoreNative, onClose }: {
+function AddCardModal({ availableReports, hiddenNative, onAddReport, onRestoreNative, onClose, mode = 'mural' }: {
   availableReports: ReportEntry[]
   hiddenNative: MuralNativeCard[]
   onAddReport: (cardId: string) => void
   onRestoreNative: (id: string) => void
   onClose: () => void
+  mode?: 'mural' | 'grid'
 }) {
   const [search, setSearch] = useState('')
   const q = search.toLowerCase()
@@ -1175,8 +1187,12 @@ function AddCardModal({ availableReports, hiddenNative, onAddReport, onRestoreNa
       }}>
         <div style={{ padding: '16px 20px 12px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: T.text1 }}>Adicionar card ao mural</div>
-            <div style={{ fontSize: 12, color: T.text3, marginTop: 2 }}>Inclua relatórios ou restaure cards removidos</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: T.text1 }}>
+              {mode === 'grid' ? 'Adicionar card ao board' : 'Adicionar card ao mural'}
+            </div>
+            <div style={{ fontSize: 12, color: T.text3, marginTop: 2 }}>
+              {mode === 'grid' ? 'Escolha um relatório para o board de composição' : 'Inclua relatórios ou restaure cards removidos'}
+            </div>
           </div>
           <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 7, background: `${T.text3}14`, border: 'none', color: T.text2, cursor: 'pointer', fontSize: 18, lineHeight: '30px', textAlign: 'center' }}>×</button>
         </div>
@@ -1193,7 +1209,7 @@ function AddCardModal({ availableReports, hiddenNative, onAddReport, onRestoreNa
           {isEmpty ? (
             <div style={{ textAlign: 'center', padding: '36px 0', color: T.text3, fontSize: 13 }}>
               {availableReports.length === 0 && hiddenNative.length === 0
-                ? 'Todos os cards já estão no mural.'
+                ? (mode === 'grid' ? 'Todos os relatórios já estão no board.' : 'Todos os cards já estão no mural.')
                 : 'Nenhum card encontrado.'}
             </div>
           ) : (
@@ -1248,7 +1264,7 @@ function AddCardModal({ availableReports, hiddenNative, onAddReport, onRestoreNa
                           }}
                             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85' }}
                             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1' }}
-                          >+ Adicionar ao mural</button>
+                          >{mode === 'grid' ? '+ Adicionar ao board' : '+ Adicionar ao mural'}</button>
                         </div>
                       </div>
                     ))}
@@ -1338,6 +1354,151 @@ function ReportCardTile({ slot, onOpen, onDismiss }: {
   )
 }
 
+// ─── Composition Grid ────────────────────────────────────────────────────────
+// Span2-aware grid of assigned report cards for the secondary dashboard area.
+// Self-contained: manages its own add modal, dismiss, and real-data props.
+function CompositionGrid({ dashId, tenantId, selProj }: {
+  dashId: DashboardType
+  tenantId: string
+  selProj?: Set<string>
+}) {
+  const { activeUser } = useSession()
+  const [tick, setTick]          = useState(0)
+  const [showAddModal, setShowAdd] = useState(false)
+  void tick
+
+  const slots     = getGridCards(tenantId, dashId as AssignmentTarget, activeUser.user_id)
+  const gridIds   = new Set(slots.map(s => s.cardId))
+  const available = REPORT_CARDS_LIST.filter(r => !gridIds.has(r.id))
+  const canAdd    = available.length > 0
+
+  // Real sprint data for charts that support extra props
+  const sprintItems   = byProjects(getSprintItems('Sprint 14'), selProj ?? new Set(ALL_PROJ_IDS))
+  const sprintPtTotal = sprintItems.reduce((s, w) => s + (w.points ?? 0), 0) || 38
+  const sprintPtDone  = sprintItems.filter(w => w.status === 'done').reduce((s, w) => s + (w.points ?? 0), 0)
+
+  function handleDismiss(cardId: string) {
+    dismissGridCard(tenantId, dashId as AssignmentTarget, cardId, activeUser.user_id)
+    setTick(t => t + 1)
+  }
+  function handleAdd(cardId: string) {
+    const entry = REPORT_REGISTRY[cardId]
+    if (!entry) return
+    pinGridCard(tenantId, dashId as AssignmentTarget, cardId, entry.title, activeUser.user_id)
+    setTick(t => t + 1)
+    setShowAdd(false)
+  }
+
+  return (
+    // gridColumn: '1 / -1' spans full width of the parent 2-col Grid
+    <div id={`comp-grid-${dashId}`} style={{ gridColumn: '1 / -1', marginTop: 4 }}>
+      {showAddModal && (
+        <AddCardModal
+          availableReports={available}
+          hiddenNative={[]}
+          onAddReport={handleAdd}
+          onRestoreNative={() => {}}
+          onClose={() => setShowAdd(false)}
+          mode="grid"
+        />
+      )}
+
+      {/* Board toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+          Board de Composição
+        </span>
+        <button
+          id={`comp-grid-add-${dashId}`}
+          onClick={() => setShowAdd(true)}
+          disabled={!canAdd}
+          style={{
+            fontSize: 11, color: T.accent, background: T.accentDim,
+            border: `1px solid ${T.accentBorder}`, borderRadius: 6,
+            padding: '4px 10px', cursor: canAdd ? 'pointer' : 'not-allowed',
+            opacity: canAdd ? 1 : 0.4,
+            display: 'flex', alignItems: 'center', gap: 4,
+          }}
+        >
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+          </svg>
+          Adicionar card
+        </button>
+        {slots.length > 0 && (
+          <span style={{ fontSize: 10, color: T.text3 }}>{slots.length} card{slots.length !== 1 ? 's' : ''}</span>
+        )}
+      </div>
+
+      {/* Cards — span2-aware responsive grid */}
+      {slots.length > 0 ? (
+        <div
+          className="responsive-grid"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+            gap: 12,
+          }}
+        >
+          {slots.map(slot => {
+            const entry = REPORT_REGISTRY[slot.cardId]
+            if (!entry) return null
+            // Inject real data props for charts that support them
+            const extraProps: Record<string, unknown> = {}
+            if (slot.cardId === 'burndown') {
+              extraProps.sprintTotal     = sprintPtTotal
+              extraProps.sprintRemaining = sprintPtTotal - sprintPtDone
+            }
+            const Comp = entry.Component as (p: { variant?: 'thumbnail' | 'full' } & Record<string, unknown>) => JSX.Element
+            return (
+              <div
+                key={slot.cardId}
+                style={{
+                  gridColumn: entry.span2 ? '1 / -1' : 'auto',
+                  minWidth: 0,
+                }}
+              >
+                <SCard
+                  title={entry.title}
+                  action={
+                    <button
+                      title="Remover do board"
+                      onClick={() => handleDismiss(slot.cardId)}
+                      style={{ fontSize: 11, color: T.text3, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}
+                    >
+                      ✕
+                    </button>
+                  }
+                >
+                  <div style={{ paddingTop: 4 }}>
+                    <Comp variant="full" {...extraProps} />
+                  </div>
+                </SCard>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        canAdd && (
+          <div style={{
+            textAlign: 'center', padding: '20px',
+            border: `1px dashed ${T.border}`, borderRadius: 10,
+            color: T.text3, fontSize: 12,
+          }}>
+            Nenhum card no board.{' '}
+            <button
+              onClick={() => setShowAdd(true)}
+              style={{ fontSize: 11, color: T.accent, background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              + Adicionar card
+            </button>
+          </div>
+        )
+      )}
+    </div>
+  )
+}
+
 // ─── Unified Home Mural ───────────────────────────────────────────────────────
 // Merges native KPI cards and assigned report cards into one dismissable grid.
 function UnifiedMural({ dashId, tenantId, nativeCards, onNav }: {
@@ -1347,59 +1508,43 @@ function UnifiedMural({ dashId, tenantId, nativeCards, onNav }: {
   onNav: (v: string) => void
 }) {
   const { activeUser } = useSession()
-  const [tick, setTick]                = useState(0)
-  const [openChartId, setOpenChartId]  = useState<string | null>(null)
-  const [showAddModal, setShowAddModal] = useState(false)
+  const [tick, setTick]               = useState(0)
+  const [openChartId, setOpenChartId] = useState<string | null>(null)
   void tick
 
   const dismissedNativeIds = getDismissedNative(activeUser.user_id, dashId)
   const visibleNative = nativeCards.filter(c => !dismissedNativeIds.has(c.id))
-  const hiddenNative  = nativeCards.filter(c =>  dismissedNativeIds.has(c.id))
 
-  const target       = dashId as AssignmentTarget
-  const reportSlots  = getVisibleHomeCards(tenantId, target, activeUser.user_id)
-  const reportVisIds = new Set(reportSlots.map(s => s.cardId))
-  const availReports = REPORT_CARDS_LIST.filter(r => !reportVisIds.has(r.id))
-
-  const totalCount = visibleNative.length + reportSlots.length
-  const canAdd     = availReports.length > 0 || hiddenNative.length > 0
+  const target      = dashId as AssignmentTarget
+  const reportSlots = getVisibleHomeCards(tenantId, target, activeUser.user_id)
+  const totalCount  = visibleNative.length + reportSlots.length
 
   function handleDismissNative(id: string) {
     dismissNativeCard(activeUser.user_id, dashId, id); setTick(t => t + 1)
   }
-  function handleRestoreNative(id: string) {
-    restoreNativeCard(activeUser.user_id, dashId, id); setTick(t => t + 1); setShowAddModal(false)
-  }
   function handleDismissReport(cardId: string) {
     dismissHomeCard(activeUser.user_id, dashId, cardId); setTick(t => t + 1)
-  }
-  function handleAddReport(cardId: string) {
-    pinHomeCard(activeUser.user_id, dashId, cardId); setTick(t => t + 1); setShowAddModal(false)
   }
 
   return (
     <>
       {openChartId && <ReportChartModal reportId={openChartId} onClose={() => setOpenChartId(null)} />}
-      {showAddModal && (
-        <AddCardModal
-          availableReports={availReports}
-          hiddenNative={hiddenNative}
-          onAddReport={handleAddReport}
-          onRestoreNative={handleRestoreNative}
-          onClose={() => setShowAddModal(false)}
-        />
-      )}
 
       {/* Mural toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
         <button
-          onClick={() => setShowAddModal(true)}
-          disabled={!canAdd}
+          onClick={() => {
+            const grid = document.getElementById(`comp-grid-${dashId}`)
+            grid?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            setTimeout(() => {
+              const addBtn = document.getElementById(`comp-grid-add-${dashId}`) as HTMLButtonElement | null
+              if (addBtn && !addBtn.disabled) addBtn.click()
+            }, 380)
+          }}
           style={{
             fontSize: 11, color: T.accent, background: T.accentDim,
             border: `1px solid ${T.accentBorder}`, borderRadius: 6,
-            padding: '4px 10px', cursor: canAdd ? 'pointer' : 'not-allowed',
-            opacity: canAdd ? 1 : 0.4,
+            padding: '4px 10px', cursor: 'pointer',
             display: 'flex', alignItems: 'center', gap: 4,
           }}
         >
@@ -1425,11 +1570,13 @@ function UnifiedMural({ dashId, tenantId, nativeCards, onNav }: {
           textAlign: 'center', padding: '28px 20px',
           border: `1px dashed ${T.border}`, borderRadius: 10, color: T.text3, fontSize: 12,
         }}>
-          Mural vazio.{canAdd && (
-            <button onClick={() => setShowAddModal(true)} style={{ marginLeft: 8, fontSize: 11, color: T.accent, background: 'none', border: 'none', cursor: 'pointer' }}>
-              + Adicionar card
-            </button>
-          )}
+          Mural vazio.{' '}
+          <button
+            onClick={() => document.getElementById(`comp-grid-${dashId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            style={{ marginLeft: 4, fontSize: 11, color: T.accent, background: 'none', border: 'none', cursor: 'pointer' }}
+          >
+            Ver board →
+          </button>
         </div>
       ) : (
         <div className="responsive-grid" style={{

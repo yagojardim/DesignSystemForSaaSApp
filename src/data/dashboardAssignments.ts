@@ -13,6 +13,8 @@ export interface DashboardAssignment {
   card_id:     string
   card_title:  string
   targets:     AssignmentTarget[]
+  // per-target slot: 'mural' = top KPI strip | 'grid' = secondary composition area
+  slots?:      Partial<Record<AssignmentTarget, 'mural' | 'grid'>>
   assigned_by: string
   tenant_id:   string
   updated_at:  string
@@ -57,6 +59,14 @@ let _assignments: DashboardAssignment[] = [
     assigned_by: 'u_admin', tenant_id: MOCK_TENANT.tenant_id,
     updated_at: new Date().toISOString(),
   },
+  // Health card in the composition grid of product-owner
+  {
+    id: 'da_003', card_id: 'health', card_title: 'Saúde do Projeto',
+    targets: ['product-owner'],
+    slots: { 'product-owner': 'grid' },
+    assigned_by: 'u_admin', tenant_id: MOCK_TENANT.tenant_id,
+    updated_at: new Date().toISOString(),
+  },
 ]
 
 let _nextId = 10
@@ -80,18 +90,20 @@ export function upsertAssignment(
   card_title: string,
   targets: AssignmentTarget[],
   assigned_by: string,
+  slots?: Partial<Record<AssignmentTarget, 'mural' | 'grid'>>,
 ): DashboardAssignment {
   const existing = _assignments.find(a => a.tenant_id === tenant_id && a.card_id === card_id)
   const updated_at = new Date().toISOString()
   if (existing) {
-    existing.targets    = targets
-    existing.updated_at = updated_at
+    existing.targets     = targets
+    existing.slots       = slots
+    existing.updated_at  = updated_at
     existing.assigned_by = assigned_by
     return existing
   }
   const newA: DashboardAssignment = {
     id: `da_${String(++_nextId).padStart(3, '0')}`,
-    card_id, card_title, targets,
+    card_id, card_title, targets, slots,
     assigned_by, tenant_id, updated_at,
   }
   _assignments = [..._assignments, newA]
@@ -147,15 +159,20 @@ export function getDismissedNative(userId: string, dashId: string): Set<string> 
   return _dismissedNative[_prefKey(userId, dashId)] ?? new Set<string>()
 }
 
+// Returns the slot a card occupies for a given target (default: 'mural')
+export function getCardSlot(a: DashboardAssignment, target: AssignmentTarget): 'mural' | 'grid' {
+  return a.slots?.[target] ?? 'mural'
+}
+
 export function getVisibleHomeCards(tenantId: string, dashId: AssignmentTarget, userId: string): HomeCardSlot[] {
   const assigned = getAssignedCards(tenantId, dashId)
   const k        = _prefKey(userId, dashId)
   const dismissed = _dismissed[k] ?? new Set<string>()
   const pinned    = _pinned[k] ?? []
 
-  // Admin-assigned, not dismissed
+  // Admin-assigned to mural slot, not dismissed
   const result: HomeCardSlot[] = assigned
-    .filter(a => !dismissed.has(a.card_id))
+    .filter(a => getCardSlot(a, dashId) === 'mural' && !dismissed.has(a.card_id))
     .map(a => ({ cardId: a.card_id, cardTitle: a.card_title, isUserPinned: false }))
 
   // User-pinned extras not in assigned list
@@ -166,4 +183,40 @@ export function getVisibleHomeCards(tenantId: string, dashId: AssignmentTarget, 
     }
   }
   return result
+}
+
+// Cards assigned to the secondary composition grid for a given profile/target
+export function getGridCards(tenantId: string, dashId: AssignmentTarget, userId: string): HomeCardSlot[] {
+  const assigned  = getAssignedCards(tenantId, dashId)
+  const dismissed = _dismissed[_prefKey(userId, dashId)] ?? new Set<string>()
+  return assigned
+    .filter(a => getCardSlot(a, dashId) === 'grid' && !dismissed.has(a.card_id))
+    .map(a => ({ cardId: a.card_id, cardTitle: a.card_title, isUserPinned: false }))
+}
+
+// Add a report card to the composition grid for a given dashboard (user-level action for prototype)
+export function pinGridCard(
+  tenantId: string, dashId: AssignmentTarget,
+  cardId: string, cardTitle: string, userId: string,
+) {
+  const existing = _assignments.find(a => a.tenant_id === tenantId && a.card_id === cardId)
+  const targets = existing ? [...new Set([...existing.targets, dashId])] : [dashId]
+  const slots = { ...(existing?.slots ?? {}), [dashId]: 'grid' as const }
+  upsertAssignment(tenantId, cardId, cardTitle, targets, userId, slots)
+}
+
+// Remove a report card from the composition grid of a given dashboard
+export function dismissGridCard(
+  tenantId: string, dashId: AssignmentTarget, cardId: string, userId: string,
+) {
+  const existing = _assignments.find(a => a.tenant_id === tenantId && a.card_id === cardId)
+  if (!existing) return
+  const targets = existing.targets.filter(t => t !== dashId)
+  const slots = { ...(existing.slots ?? {}) }
+  delete slots[dashId]
+  if (targets.length === 0) {
+    removeAssignment(tenantId, cardId)
+  } else {
+    upsertAssignment(tenantId, cardId, existing.card_title, targets, userId, slots)
+  }
 }
