@@ -6,6 +6,7 @@ import {
   WorkItemDetailDrawer, FilterBar, ProjectMultiSelect,
   SCard, ProgressBar, StatusBadge, ConditionalTag, Av,
   AuditFeed, ActivityTimeline, EmptyState, LoadingState,
+  MiniBarChart, MiniSparkline,
   type WorkItem, type FilterState, type RagStatus,
 } from '../components/ds/DashboardKit'
 import {
@@ -74,7 +75,7 @@ const SPRINTS = ['Sprint 14', 'Sprint 15']
 
 // ─── Panel grid wrapper ───────────────────────────────────────────────────────
 function Grid({ cols = '1fr 1fr', children }: { cols?: string; children: ReactNode }) {
-  return <div className="responsive-grid" style={{ display: 'grid', gridTemplateColumns: cols, gap: 12 }}>{children}</div>
+  return <div className="responsive-grid" style={{ display: 'grid', gridTemplateColumns: cols, gap: 12, alignItems: 'stretch' }}>{children}</div>
 }
 function ColSpan({ children }: { children: ReactNode }) {
   return <div style={{ gridColumn: '1 / -1' }}>{children}</div>
@@ -124,12 +125,12 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
   return (
     <>
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
-        <KpiCard value="3"  label="Projetos" sub="2 ativos" disclaimer="projetos ativos neste tenant" onClick={() => onNav('projects-list')} />
-        <KpiCard value={String(_boards.length)} label="Boards" sub={`${_activeBoards} ativo${_activeBoards !== 1 ? 's' : ''}`} disclaimer="boards de Kanban disponíveis" onClick={() => onNav('boards-list')} />
-        <KpiCard value={String(_modCounts.active)} label="Módulos ativos" sub={`de ${_modCounts.total}`} disclaimer="módulos habilitados para este tenant" onClick={() => onNav('modules')} />
-        <KpiCard value="11" label="Usuários" sub="9 ativos" disclaimer="membros registrados no tenant" onClick={() => onNav('team:membros')} />
-        <KpiCard value={String(_pendingInvites)} label="Convites" sub={_inviteSub} disclaimer="convites pendentes de aceitação" color={_pendingInvites > 0 ? T.warn : undefined} onClick={() => onNav('team:convites')} />
+      <div className="responsive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, alignItems: 'stretch' }}>
+        <KpiCard value="3"  label="Projetos" sub="2 ativos" disclaimer="projetos ativos neste tenant" miniViz={<MiniBarChart data={[{label:'Q1',value:2},{label:'Q2',value:2},{label:'Q3',value:3,current:true}]} showAvg={false} />} onClick={() => onNav('projects-list')} />
+        <KpiCard value={String(_boards.length)} label="Boards" sub={`${_activeBoards} ativo${_activeBoards !== 1 ? 's' : ''}`} disclaimer="boards de Kanban disponíveis" miniViz={<MiniBarChart data={[{label:'Jan',value:3},{label:'Mar',value:4},{label:'Jun',value:5,current:true}]} showAvg={false} />} onClick={() => onNav('boards-list')} />
+        <KpiCard value={String(_modCounts.active)} label="Módulos ativos" sub={`de ${_modCounts.total}`} disclaimer="módulos habilitados para este tenant" miniViz={<MiniBarChart data={[{label:'Jan',value:2},{label:'Mar',value:3},{label:'Jun',value:3,current:true}]} showAvg={false} />} onClick={() => onNav('modules')} />
+        <KpiCard value="11" label="Usuários" sub="9 ativos" disclaimer="membros registrados no tenant" miniViz={<MiniSparkline data={[{label:'Jan',value:7},{value:8},{value:9},{value:10},{label:'Jul',value:11}]} />} onClick={() => onNav('team:membros')} />
+        <KpiCard value={String(_pendingInvites)} label="Convites" sub={_inviteSub} disclaimer="convites pendentes de aceitação" color={_pendingInvites > 0 ? T.warn : undefined} miniViz={<MiniSparkline data={[{label:'Jan',value:0},{value:1},{value:2},{value:3},{label:'Jul',value:2}]} color="#f5a524" />} onClick={() => onNav('team:convites')} />
       </div>
 
       <div style={{ marginTop: 12 }}>
@@ -211,10 +212,10 @@ function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
       <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
-        <KpiCard value="4"   label="Projetos Ativos"      sub="2 no prazo"   disclaimer="projetos com sprint ativa ou em andamento" onClick={() => onNav('projects-list')} />
-        <KpiCard value="2"   label="Em Risco / Atrasados" sub="1 crítico"    disclaimer="projetos com RAG amarelo ou vermelho" color={T.warn} alert onClick={() => onNav('reports')} />
-        <KpiCard value="71%" label="Previsibilidade"      sub="meta: 80%"    disclaimer="% do planejado efetivamente entregue" onClick={() => openChart('velocity')} />
-        <KpiCard value="67%" label="Planejado × Concluído" sub="Q2 2025"    disclaimer="comparativo de entrega vs. compromisso da sprint" onClick={() => openChart('criados')} />
+        <KpiCard value="4"   label="Projetos Ativos"      sub="2 no prazo"   disclaimer="projetos com sprint ativa ou em andamento" miniViz={<MiniBarChart data={[{label:'S10',value:3},{label:'S11',value:4},{label:'S12',value:4},{label:'S13',value:4,current:true}]} showAvg={false} />} onClick={() => onNav('projects-list')} />
+        <KpiCard value="2"   label="Em Risco / Atrasados" sub="1 crítico"    disclaimer="projetos com RAG amarelo ou vermelho" color={T.warn} alert miniViz={<MiniSparkline data={[{label:'S8',value:1},{value:2},{value:3},{value:2},{value:1},{label:'S13',value:2}]} color="#f5a524" />} onClick={() => onNav('reports')} />
+        <KpiCard value="71%" label="Previsibilidade"      sub="meta: 80%"    disclaimer="% do planejado efetivamente entregue" miniViz={<MiniBarChart data={[{label:'S8',value:18},{label:'S9',value:22},{label:'S10',value:19},{label:'S11',value:25},{label:'S12',value:21},{label:'S13',value:22,current:true}]} />} onClick={() => openChart('velocity')} />
+        <KpiCard value="67%" label="Planejado × Concluído" sub="Q2 2025"    disclaimer="comparativo de entrega vs. compromisso da sprint" miniViz={<MiniBarChart data={[{label:'S8',value:62},{label:'S9',value:65},{label:'S10',value:71},{label:'S11',value:68},{label:'S12',value:70},{label:'S13',value:67,current:true}]} />} onClick={() => openChart('criados')} />
       </Grid>
 
       <div style={{ marginTop: 12 }}>
@@ -268,10 +269,10 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
       <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
-        <KpiCard value="72%" label="Progresso do Projeto" sub="Sprint 14 ativo" disclaimer="% de tarefas concluídas na sprint ativa" onClick={() => openChart('burndown')} />
-        <KpiCard value="18d" label="Prazo Restante"       sub="Entrega: 28 ago" disclaimer="dias até a data de entrega planejada" onClick={() => onNav('gantt')} />
-        <KpiCard value={String(blocked.length)} label="Bloqueios Ativos" sub="ver lista" disclaimer="demandas atualmente bloqueadas" color={T.crit} alert onClick={() => onNav('list')} />
-        <KpiCard value="+12%" label="Risco de Escopo"     sub="vs planejamento" disclaimer="variação de escopo vs. o planejado" color={T.warn} alert onClick={() => openChart('criados')} />
+        <KpiCard value="72%" label="Progresso do Projeto" sub="Sprint 14 ativo" disclaimer="% de tarefas concluídas na sprint ativa" miniViz={<MiniBarChart data={[{label:'S10',value:55},{label:'S11',value:61},{label:'S12',value:68},{label:'S13',value:72,current:true}]} />} onClick={() => openChart('burndown')} />
+        <KpiCard value="18d" label="Prazo Restante"       sub="Entrega: 28 ago" disclaimer="dias até a data de entrega planejada" miniViz={<MiniSparkline data={[{label:'S10',value:60},{value:45},{value:32},{label:'S13',value:18}]} color="#60a5fa" />} onClick={() => onNav('gantt')} />
+        <KpiCard value={String(blocked.length)} label="Bloqueios Ativos" sub="ver lista" disclaimer="demandas atualmente bloqueadas" color={T.crit} alert miniViz={<MiniSparkline data={[{label:'S8',value:4},{value:3},{value:5},{value:2},{value:3},{label:'S13',value:blocked.length}]} color="#ef4444" />} onClick={() => onNav('list')} />
+        <KpiCard value="+12%" label="Risco de Escopo"     sub="vs planejamento" disclaimer="variação de escopo vs. o planejado" color={T.warn} alert miniViz={<MiniSparkline data={[{label:'S8',value:2},{value:5},{value:7},{value:9},{value:11},{label:'S13',value:12}]} color="#f5a524" />} onClick={() => openChart('criados')} />
       </Grid>
 
       <div style={{ marginTop: 12 }}>
@@ -343,10 +344,10 @@ function ProductManagerPanel({ onNav }: { onNav: (v: string) => void }) {
     <>
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
       <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
-        <KpiCard value="930"  label="MAU"              sub="+8% vs mês ant." disclaimer="usuários únicos ativos nos últimos 30 dias" color={T.success} onClick={() => onNav('reports')} />
-        <KpiCard value="7.5%" label="Stickiness"       sub="DAU/MAU — meta 10-20%" disclaimer="frequência de uso: ativos diários ÷ mensais" color={T.warn} onClick={() => onNav('reports')} />
-        <KpiCard value="3.2%" label="Churn Rate"       sub="meta: &lt;2%" disclaimer="taxa de abandono por tenant — sem impacto billing" color={T.crit} alert onClick={() => onNav('reports')} />
-        <KpiCard value="52%"  label="Adoção de Features" sub="base elegível" disclaimer="% médio de adoção sobre base elegível por feature" onClick={() => onNav('reports')} />
+        <KpiCard value="930"  label="MAU"              sub="+8% vs mês ant." disclaimer="usuários únicos ativos nos últimos 30 dias" color={T.success} miniViz={<MiniSparkline data={[{label:'Jan',value:720},{value:750},{value:800},{value:860},{value:900},{label:'Jun',value:930}]} color="#34d399" />} onClick={() => onNav('reports')} />
+        <KpiCard value="7.5%" label="Stickiness"       sub="DAU/MAU — meta 10-20%" disclaimer="frequência de uso: ativos diários ÷ mensais" color={T.warn} miniViz={<MiniSparkline data={[{label:'Jan',value:6.1},{value:6.4},{value:6.8},{value:7.0},{value:7.2},{label:'Jun',value:7.5}]} color="#f5a524" />} onClick={() => onNav('reports')} />
+        <KpiCard value="3.2%" label="Churn Rate"       sub="meta: &lt;2%" disclaimer="taxa de abandono por tenant — sem impacto billing" color={T.crit} alert miniViz={<MiniSparkline data={[{label:'Jan',value:2.8},{value:2.9},{value:3.0},{value:3.1},{value:3.2},{label:'Jun',value:3.2}]} color="#ef4444" />} onClick={() => onNav('reports')} />
+        <KpiCard value="52%"  label="Adoção de Features" sub="base elegível" disclaimer="% médio de adoção sobre base elegível por feature" miniViz={<MiniBarChart data={[{label:'Jan',value:38},{label:'Feb',value:42},{label:'Mar',value:46},{label:'Abr',value:49},{label:'Mai',value:51},{label:'Jun',value:52,current:true}]} />} onClick={() => onNav('reports')} />
       </Grid>
 
       <div style={{ marginTop: 12 }}>
@@ -635,9 +636,9 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
       <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
-        <KpiCard value={`${coverageReady}%`} label="Cobertura Ready" sub="pts prontos ÷ velocity" disclaimer="pontos prontos ÷ velocidade média da sprint" onClick={() => onNav('list')} />
-        <KpiCard value={`${backlogHealth}%`} label="Saúde do Backlog" sub="itens saudáveis ÷ avaliáveis" disclaimer="itens saudáveis ÷ total de itens avaliáveis" color={backlogHealth < 60 ? T.warn : T.success} alert={backlogHealth < 60} onClick={() => onNav('list')} />
-        <KpiCard value={`${funcProgress || 68}%`} label="Progresso Funcional" sub="considera aceite do PO" disclaimer="considera critério de aceite, não só status Done" onClick={() => openChart('burndown')} />
+        <KpiCard value={`${coverageReady}%`} label="Cobertura Ready" sub="pts prontos ÷ velocity" disclaimer="pontos prontos ÷ velocidade média da sprint" miniViz={<MiniBarChart data={[{label:'S10',value:55},{label:'S11',value:62},{label:'S12',value:70},{label:'S13',value:coverageReady,current:true}]} />} onClick={() => onNav('list')} />
+        <KpiCard value={`${backlogHealth}%`} label="Saúde do Backlog" sub="itens saudáveis ÷ avaliáveis" disclaimer="itens saudáveis ÷ total de itens avaliáveis" color={backlogHealth < 60 ? T.warn : T.success} alert={backlogHealth < 60} miniViz={<MiniSparkline data={[{label:'S10',value:80},{value:77},{value:75},{label:'S13',value:backlogHealth}]} color={backlogHealth < 60 ? '#ef4444' : '#34d399'} />} onClick={() => onNav('list')} />
+        <KpiCard value={`${funcProgress || 68}%`} label="Progresso Funcional" sub="considera aceite do PO" disclaimer="considera critério de aceite, não só status Done" miniViz={<MiniBarChart data={[{label:'S10',value:50},{label:'S11',value:58},{label:'S12',value:63},{label:'S13',value:funcProgress||68,current:true}]} />} onClick={() => openChart('burndown')} />
         <KpiCard
           value={unreadCount > 0 ? String(unreadCount) : '0'}
           label="Msgs do Cliente"
@@ -645,6 +646,7 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
           disclaimer="mensagens de clientes recebidas não lidas"
           color={unreadCount > 0 ? T.accent : T.text3}
           alert={unreadCount > 0}
+          miniViz={<MiniSparkline data={[{label:'D-5',value:2},{value:1},{value:3},{value:2},{value:1},{label:'Hoje',value:unreadCount}]} color={unreadCount > 0 ? '#3b82f6' : '#6b7280'} />}
           onClick={() => onNav('client-messages')}
         />
       </Grid>
@@ -713,10 +715,10 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
       <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
-        <KpiCard value={`${sprintHealth || 62}%`} label="Saúde da Sprint" sub={`${parados.length} parados`} disclaimer="% de conclusão em relação à meta da sprint" color={T.warn} alert onClick={() => openSMChart('burndown')} />
-        <KpiCard value={String(blocked.length)} label="Impedimentos" sub="ativos" disclaimer="impedimentos formais sem resolução registrada" color={T.crit} alert onClick={() => onNav('list')} />
-        <KpiCard value="⚠" label="Sprint Goal" sub="2 itens críticos parados" disclaimer="itens que ameaçam atingir o objetivo da sprint" color={T.warn} onClick={() => onNav('project')} />
-        <KpiCard value="6" label="WIP Atual" sub="limite: 5 — excedido" disclaimer="itens em andamento vs. limite acordado pelo time" color={T.crit} alert onClick={() => onNav('project')} />
+        <KpiCard value={`${sprintHealth || 62}%`} label="Saúde da Sprint" sub={`${parados.length} parados`} disclaimer="% de conclusão em relação à meta da sprint" color={T.warn} alert miniViz={<MiniBarChart data={[{label:'S8',value:74},{label:'S9',value:68},{label:'S10',value:71},{label:'S11',value:65},{label:'S12',value:70},{label:'S13',value:sprintHealth||62,current:true}]} />} onClick={() => openSMChart('burndown')} />
+        <KpiCard value={String(blocked.length)} label="Impedimentos" sub="ativos" disclaimer="impedimentos formais sem resolução registrada" color={T.crit} alert miniViz={<MiniSparkline data={[{label:'S8',value:3},{value:5},{value:4},{value:6},{value:3},{label:'S13',value:blocked.length}]} color="#ef4444" />} onClick={() => onNav('list')} />
+        <KpiCard value="⚠" label="Sprint Goal" sub="2 itens críticos parados" disclaimer="itens que ameaçam atingir o objetivo da sprint" color={T.warn} miniViz={<MiniBarChart data={[{label:'S10',value:3},{label:'S11',value:2},{label:'S12',value:1},{label:'S13',value:2,current:true}]} showAvg={false} />} onClick={() => onNav('project')} />
+        <KpiCard value="6" label="WIP Atual" sub="limite: 5 — excedido" disclaimer="itens em andamento vs. limite acordado pelo time" color={T.crit} alert miniViz={<MiniSparkline data={[{label:'S10',value:4},{value:5},{value:6},{label:'S13',value:6}]} color="#ef4444" />} onClick={() => onNav('project')} />
       </Grid>
 
       <div style={{ marginTop: 12 }}>
@@ -809,10 +811,10 @@ function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
       <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
-        <KpiCard value="74%" label="Saúde Técnica" sub="cobertura de testes" disclaimer="score composto de cobertura, débito e estabilidade" color={T.warn} onClick={() => openTLChart('health')} />
-        <KpiCard value={String(critBugs)} label="Bugs Críticos" sub="em prod" disclaimer="bugs P0/P1 bloqueando entrega ou em produção" color={T.crit} alert onClick={() => openTLChart('bugs')} />
-        <KpiCard value="4"   label="Deploys/semana" sub="+2 vs semana ant." disclaimer="frequência de deploy — métrica DORA" color={T.success} onClick={() => onNav('reports')} />
-        <KpiCard value="0.8%" label="Error Rate" sub="meta: &lt;0.5%" disclaimer="taxa de erro em produção nas últimas 24h" color={T.warn} alert onClick={() => onNav('reports')} />
+        <KpiCard value="74%" label="Saúde Técnica" sub="cobertura de testes" disclaimer="score composto de cobertura, débito e estabilidade" color={T.warn} miniViz={<MiniBarChart data={[{label:'S8',value:70},{label:'S9',value:72},{label:'S10',value:69},{label:'S11',value:73},{label:'S12',value:71},{label:'S13',value:74,current:true}]} />} onClick={() => openTLChart('health')} />
+        <KpiCard value={String(critBugs)} label="Bugs Críticos" sub="em prod" disclaimer="bugs P0/P1 bloqueando entrega ou em produção" color={T.crit} alert miniViz={<MiniSparkline data={[{label:'S8',value:8},{value:6},{value:7},{value:5},{value:4},{label:'S13',value:critBugs}]} color="#ef4444" />} onClick={() => openTLChart('bugs')} />
+        <KpiCard value="4"   label="Deploys/semana" sub="+2 vs semana ant." disclaimer="frequência de deploy — métrica DORA" color={T.success} miniViz={<MiniBarChart data={[{label:'S-5',value:3},{label:'S-4',value:4},{label:'S-3',value:3},{label:'S-2',value:5},{label:'S-1',value:4},{label:'Atual',value:4,current:true}]} />} onClick={() => onNav('reports')} />
+        <KpiCard value="0.8%" label="Error Rate" sub="meta: &lt;0.5%" disclaimer="taxa de erro em produção nas últimas 24h" color={T.warn} alert miniViz={<MiniSparkline data={[{label:'D-5',value:0.4},{value:0.5},{value:0.6},{value:0.7},{value:0.8},{label:'Hoje',value:0.8}]} color="#f5a524" />} onClick={() => onNav('reports')} />
       </Grid>
 
       <div style={{ marginTop: 12 }}>
@@ -883,10 +885,10 @@ function DevPanel({ onNav }: { onNav: (v: string) => void }) {
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
       <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
-        <KpiCard value={String(myItems.length)} label="Meus Itens Ativos" sub="1 bloqueado" disclaimer="tarefas atribuídas a mim nesta sprint" onClick={() => onNav('list')} />
-        <KpiCard value="1" label="Atrasados" sub="BUG-38 vence hoje" disclaimer="itens com prazo hoje ou já vencido" color={T.crit} alert onClick={() => onNav('list')} />
-        <KpiCard value={String(blocked.length)} label="Meus Bloqueados" sub="" disclaimer="minhas tarefas aguardando desbloqueio externo" color={T.warn} alert onClick={() => onNav('list')} />
-        <KpiCard value="2" label="PRs Abertos" sub="1 precisa de ação" disclaimer="pull requests abertos nos quais estou envolvido" color={T.accent} onClick={() => onNav('project')} />
+        <KpiCard value={String(myItems.length)} label="Meus Itens Ativos" sub="1 bloqueado" disclaimer="tarefas atribuídas a mim nesta sprint" miniViz={<MiniBarChart data={[{label:'S10',value:12},{label:'S11',value:14},{label:'S12',value:11},{label:'S13',value:myItems.length,current:true}]} showAvg={false} />} onClick={() => onNav('list')} />
+        <KpiCard value="1" label="Atrasados" sub="BUG-38 vence hoje" disclaimer="itens com prazo hoje ou já vencido" color={T.crit} alert miniViz={<MiniSparkline data={[{label:'S10',value:0},{value:1},{value:2},{value:1},{value:1},{label:'S13',value:1}]} color="#ef4444" />} onClick={() => onNav('list')} />
+        <KpiCard value={String(blocked.length)} label="Meus Bloqueados" sub="" disclaimer="minhas tarefas aguardando desbloqueio externo" color={T.warn} alert miniViz={<MiniSparkline data={[{label:'S10',value:1},{value:0},{value:2},{label:'S13',value:blocked.length}]} color="#f5a524" />} onClick={() => onNav('list')} />
+        <KpiCard value="2" label="PRs Abertos" sub="1 precisa de ação" disclaimer="pull requests abertos nos quais estou envolvido" color={T.accent} miniViz={<MiniBarChart data={[{label:'S-4',value:1},{label:'S-3',value:3},{label:'S-2',value:2},{label:'Atual',value:2,current:true}]} showAvg={false} />} onClick={() => onNav('project')} />
       </Grid>
 
       <div style={{ marginTop: 12 }}>
@@ -938,10 +940,10 @@ function UxPanel({ onNav }: { onNav: (v: string) => void }) {
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
       <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
-        <KpiCard value="8"  label="Fluxos em Design"   sub="3 projetos" disclaimer="fluxos com trabalho de design em progresso" onClick={() => onNav('list')} />
-        <KpiCard value="3"  label="Protótipos p/ Val."  sub="aguardando PO/usuário" disclaimer="protótipos aguardando feedback de usuário ou PO" color={T.accent} onClick={() => onNav('list')} />
-        <KpiCard value="4"  label="Pendências Críticas" sub="1 acessibilidade" disclaimer="fluxos sem spec, protótipo ou validação completa" color={T.crit} alert onClick={() => onNav('list')} />
-        <KpiCard value="1"  label="Handoff Pronto" sub="Dashboard por Papel" disclaimer="entregas de design prontas para implementação" color={T.success} onClick={() => onNav('list')} />
+        <KpiCard value="8"  label="Fluxos em Design"   sub="3 projetos" disclaimer="fluxos com trabalho de design em progresso" miniViz={<MiniBarChart data={[{label:'S10',value:5},{label:'S11',value:7},{label:'S12',value:6},{label:'S13',value:8,current:true}]} showAvg={false} />} onClick={() => onNav('list')} />
+        <KpiCard value="3"  label="Protótipos p/ Val."  sub="aguardando PO/usuário" disclaimer="protótipos aguardando feedback de usuário ou PO" color={T.accent} miniViz={<MiniSparkline data={[{label:'S10',value:1},{value:2},{value:4},{label:'S13',value:3}]} color="#3b82f6" />} onClick={() => onNav('list')} />
+        <KpiCard value="4"  label="Pendências Críticas" sub="1 acessibilidade" disclaimer="fluxos sem spec, protótipo ou validação completa" color={T.crit} alert miniViz={<MiniSparkline data={[{label:'S10',value:6},{value:5},{value:5},{label:'S13',value:4}]} color="#ef4444" />} onClick={() => onNav('list')} />
+        <KpiCard value="1"  label="Handoff Pronto" sub="Dashboard por Papel" disclaimer="entregas de design prontas para implementação" color={T.success} miniViz={<MiniBarChart data={[{label:'S10',value:0},{label:'S11',value:2},{label:'S12',value:1},{label:'S13',value:1,current:true}]} showAvg={false} />} onClick={() => onNav('list')} />
       </Grid>
 
       <div style={{ marginTop: 12 }}>
@@ -1006,10 +1008,10 @@ function QaPanel({ onNav }: { onNav: (v: string) => void }) {
       {drawerItem && <WorkItemDetailDrawer item={drawerItem} onClose={closeDrawer} onNav={onNav} />}
       <ProjFilterRow selected={selProj} onChange={setSelProj} />
       <Grid cols="repeat(auto-fit, minmax(150px, 1fr))">
-        <KpiCard value={String(testing.length)} label="Aguardando Teste" sub="Ready for QA" disclaimer="itens em fila de QA ou em homologação ativa" onClick={() => onNav('list')} />
-        <KpiCard value={String(critAndHighBugs)} label="Bugs Críticos" sub={critAndHighBugs > 0 ? 'requer atenção' : 'tudo ok'} disclaimer="bugs P0/P1 bloqueando entrega da sprint" color={T.crit} alert={critAndHighBugs > 0} onClick={() => openQAChart('bugs')} />
-        <KpiCard value="28%" label="Taxa de Rejeição" sub="meta: &lt;15%" disclaimer="% de itens devolvidos ao Dev pelo QA" color={T.warn} alert onClick={() => openQAChart('bugs')} />
-        <KpiCard value="6"   label="Evidências Pendentes" sub="dev não submeteu" disclaimer="bugs sem evidência de reprodução registrada" color={T.warn} onClick={() => onNav('list')} />
+        <KpiCard value={String(testing.length)} label="Aguardando Teste" sub="Ready for QA" disclaimer="itens em fila de QA ou em homologação ativa" miniViz={<MiniBarChart data={[{label:'S10',value:8},{label:'S11',value:10},{label:'S12',value:7},{label:'S13',value:testing.length,current:true}]} showAvg={false} />} onClick={() => onNav('list')} />
+        <KpiCard value={String(critAndHighBugs)} label="Bugs Críticos" sub={critAndHighBugs > 0 ? 'requer atenção' : 'tudo ok'} disclaimer="bugs P0/P1 bloqueando entrega da sprint" color={T.crit} alert={critAndHighBugs > 0} miniViz={<MiniSparkline data={[{label:'S8',value:9},{value:7},{value:8},{value:6},{value:5},{label:'S13',value:critAndHighBugs}]} color="#ef4444" />} onClick={() => openQAChart('bugs')} />
+        <KpiCard value="28%" label="Taxa de Rejeição" sub="meta: &lt;15%" disclaimer="% de itens devolvidos ao Dev pelo QA" color={T.warn} alert miniViz={<MiniSparkline data={[{label:'S8',value:18},{value:20},{value:22},{value:25},{value:26},{label:'S13',value:28}]} color="#f5a524" />} onClick={() => openQAChart('bugs')} />
+        <KpiCard value="6"   label="Evidências Pendentes" sub="dev não submeteu" disclaimer="bugs sem evidência de reprodução registrada" color={T.warn} miniViz={<MiniBarChart data={[{label:'S10',value:4},{label:'S11',value:7},{label:'S12',value:5},{label:'S13',value:6,current:true}]} showAvg={false} />} onClick={() => onNav('list')} />
       </Grid>
 
       <div style={{ marginTop: 12 }}>

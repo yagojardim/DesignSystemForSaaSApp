@@ -156,48 +156,146 @@ export function ProgressBar({ pct, color, height = 4 }: {
   )
 }
 
+// ─── MiniBarChart — compact bar chart for KpiCard right pane ─────────────────
+export function MiniBarChart({ data, showAvg = true }: {
+  data: { label: string; value: number; current?: boolean }[]
+  showAvg?: boolean
+}) {
+  if (!data.length) return null
+  const max   = Math.max(...data.map(d => d.value))
+  const avg   = Math.round(data.reduce((s, d) => s + d.value, 0) / data.length)
+  const yMax  = Math.ceil(max * 1.3 / 5) * 5 || 5
+  const n     = data.length
+  const vW = 180, vH = 88, pL = 20, pR = 16, pT = 14, pB = 14
+  const iW = vW - pL - pR, iH = vH - pT - pB
+  const gap = 3
+  const bW  = Math.max(6, (iW - gap * (n - 1)) / n)
+  const yp  = (v: number) => pT + iH - (v / yMax) * iH
+  const avgY = yp(avg)
+  const ticks = Array.from(new Set([0, Math.round(yMax / 2), yMax]))
+  return (
+    <svg viewBox={`0 0 ${vW} ${vH}`} preserveAspectRatio="xMidYMid meet"
+      style={{ width: '100%', height: '100%', display: 'block', overflow: 'visible' }}>
+      {ticks.map(v => (
+        <text key={v} x={pL - 3} y={yp(v) + 3} textAnchor="end" fontSize={7} fill={T.text3}>{v}</text>
+      ))}
+      {showAvg && (
+        <>
+          <line x1={pL} y1={avgY} x2={vW - pR} y2={avgY}
+            stroke={T.border} strokeWidth={0.8} strokeDasharray="3 2" />
+          <text x={vW - pR + 2} y={avgY + 3} fontSize={6} fill={T.text3}>avg</text>
+        </>
+      )}
+      {data.map((d, i) => {
+        const bx = pL + i * (bW + gap)
+        const bH = Math.max(2, (d.value / yMax) * iH)
+        const by = yp(d.value)
+        return (
+          <g key={`${d.label}-${i}`}>
+            <rect x={bx} y={by} width={bW} height={bH} rx={1.5}
+              fill={d.current ? '#93c5fd' : '#3b82f6'} />
+            <text x={bx + bW / 2} y={by - 2} textAnchor="middle" fontSize={6.5} fill={T.text2} fontWeight="600">
+              {d.value}
+            </text>
+            <text x={bx + bW / 2} y={vH - 1} textAnchor="middle" fontSize={6.5} fill={T.text3}>
+              {d.label}
+            </text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+// ─── MiniSparkline — compact trend line for KpiCard right pane ────────────────
+export function MiniSparkline({ data, color }: {
+  data: { label?: string; value: number }[]
+  color?: string
+}) {
+  if (data.length < 2) return null
+  const vals = data.map(d => d.value)
+  const min = Math.min(...vals), max = Math.max(...vals)
+  const range = max - min || 1
+  const vW = 180, vH = 88, pL = 22, pR = 4, pT = 10, pB = 14
+  const iW = vW - pL - pR, iH = vH - pT - pB
+  const xp = (i: number) => pL + (i / (data.length - 1)) * iW
+  const yp = (v: number) => pT + iH - ((v - min) / range) * iH
+  const pts  = data.map((d, i) => `${xp(i)},${yp(d.value)}`).join(' ')
+  const fill = `${xp(0)},${vH - pB} ${pts} ${xp(data.length - 1)},${vH - pB}`
+  const lc   = color ?? T.accent
+  const last  = vals[vals.length - 1]
+  return (
+    <svg viewBox={`0 0 ${vW} ${vH}`} preserveAspectRatio="xMidYMid meet"
+      style={{ width: '100%', height: '100%', display: 'block', overflow: 'visible' }}>
+      <polygon points={fill} fill={lc} fillOpacity={0.13} />
+      <polyline points={pts} fill="none" stroke={lc} strokeWidth={1.5}
+        strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={xp(data.length - 1)} cy={yp(last)} r={2.5} fill={lc} />
+      <text x={pL - 3} y={pT + 3}        textAnchor="end" fontSize={7} fill={T.text3}>{max}</text>
+      <text x={pL - 3} y={vH - pB + 3}   textAnchor="end" fontSize={7} fill={T.text3}>{min}</text>
+      {data[0]?.label && (
+        <text x={xp(0)} y={vH} textAnchor="middle" fontSize={6.5} fill={T.text3}>{data[0].label}</text>
+      )}
+      {data[data.length - 1]?.label && (
+        <text x={xp(data.length - 1)} y={vH} textAnchor="middle" fontSize={6.5} fill={T.text3}>
+          {data[data.length - 1].label}
+        </text>
+      )}
+    </svg>
+  )
+}
+
 // ─── KpiCard — clicking navigates to filtered list ────────────────────────────
 export function KpiCard({ value, label, sub, miniViz, disclaimer, color, alert, onClick }: {
   value: string; label: string; sub?: string; miniViz?: ReactNode; disclaimer?: string
   color?: string; alert?: boolean; onClick?: () => void
 }) {
   const [hovered, setHovered] = useState(false)
-  const clickable = !!onClick
+  const clickable  = !!onClick
+  const hasMiniViz = !!miniViz
   return (
     <div
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        background: hovered && clickable ? T.bgSurface2 : T.bgSurface,
+        background:   hovered && clickable ? T.bgSurface2 : T.bgSurface,
         borderTop:    `1px solid ${alert ? T.crit : hovered && clickable ? T.accent : T.border}`,
         borderRight:  `1px solid ${alert ? T.crit : hovered && clickable ? T.accent : T.border}`,
         borderBottom: `1px solid ${alert ? T.crit : hovered && clickable ? T.accent : T.border}`,
         borderLeft:   alert ? `3px solid ${T.crit}` : `1px solid ${hovered && clickable ? T.accent : T.border}`,
         borderRadius: 10, padding: '14px 16px',
         cursor: clickable ? 'pointer' : 'default',
-        transition: 'all 0.15s',
-        userSelect: 'none',
-        display: 'flex', flexDirection: 'column',
+        transition: 'all 0.15s', userSelect: 'none',
+        display: 'flex', flexDirection: hasMiniViz ? 'row' : 'column',
+        gap: hasMiniViz ? 10 : 0,
         minWidth: 0,
       }}
     >
-      <div style={{ fontSize: 22, fontWeight: 700, color: color ?? T.text1, lineHeight: 1 }}>{value}</div>
-      <div style={{ fontSize: 11, color: T.text2, marginTop: 4 }}>{label}</div>
-      {sub && <div style={{ fontSize: 10, color: T.text3, marginTop: 2, fontWeight: 500 }}>{sub}</div>}
-      {miniViz && <div style={{ marginTop: 8 }}>{miniViz}</div>}
-      {disclaimer && (
-        <div style={{
-          marginTop: 'auto', paddingTop: 7,
-          fontSize: 9, color: T.text3,
-          display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden',
-          borderTop: `1px solid ${T.border}`,
-          fontStyle: 'italic', letterSpacing: '0.01em', lineHeight: 1.4,
-        }}>{disclaimer}</div>
-      )}
-      {clickable && (
-        <div style={{ fontSize: 10, color: T.accent, marginTop: 4, opacity: hovered ? 1 : 0, transition: 'opacity 0.15s' }}>
-          Ver lista →
+      {/* Left: text content */}
+      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: hasMiniViz ? '0 0 42%' : 1 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, color: color ?? T.text1, lineHeight: 1 }}>{value}</div>
+        <div style={{ fontSize: 11, color: T.text2, marginTop: 4 }}>{label}</div>
+        {sub && <div style={{ fontSize: 10, color: T.text3, marginTop: 2, fontWeight: 500 }}>{sub}</div>}
+        {disclaimer && (
+          <div style={{
+            marginTop: 'auto', paddingTop: 7,
+            fontSize: 9, color: T.text3,
+            whiteSpace: 'normal', wordBreak: 'break-word',
+            borderTop: `1px solid ${T.border}`,
+            fontStyle: 'italic', letterSpacing: '0.01em', lineHeight: 1.4,
+          }}>{disclaimer}</div>
+        )}
+        {clickable && (
+          <div style={{ fontSize: 10, color: T.accent, marginTop: 4, opacity: hovered ? 1 : 0, transition: 'opacity 0.15s' }}>
+            Ver lista →
+          </div>
+        )}
+      </div>
+      {/* Right: mini visualization */}
+      {hasMiniViz && (
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'stretch' }}>
+          {miniViz}
         </div>
       )}
     </div>

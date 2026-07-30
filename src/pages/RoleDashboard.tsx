@@ -25,7 +25,7 @@ function KpiCard({ label, value, sub, disclaimer, color, trend }: {
           style={{
             marginTop: 'auto', paddingTop: 7,
             fontSize: 9, color: T.text3,
-            display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden',
+            whiteSpace: 'normal', wordBreak: 'break-word',
             borderTop: `1px solid ${T.border}`,
             fontStyle: 'italic', letterSpacing: '0.01em', lineHeight: 1.4,
           }}
